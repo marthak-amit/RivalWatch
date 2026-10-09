@@ -74,3 +74,26 @@ def test_admin_logout(client, make_admin):
     atok = client.post("/admin/login", json={"email": email, "password": pw}).json()["token"]
     assert client.post("/admin/logout", headers=bearer(atok)).status_code == 204
     assert client.get("/admin/users", headers=bearer(atok)).status_code == 401
+
+
+def test_control_characters_are_rejected_not_a_500(client):
+    bad = "a\x00b@test.local"
+    for path, body in [("/user/signup", {"email": bad, "password": "password123"}),
+                       ("/user/login", {"email": bad, "password": "x"}), ("/admin/login", {"email": bad, "password": "x"}),
+                       ("/user/login", {"email": "a@test.local", "password": "pass\x00word1"})]:
+        r = client.post(path, json=body)
+        assert r.status_code == 422, (path, r.status_code)
+    r = client.post("/api/auth/login", json={"email": bad, "password": "password123"})
+    assert r.status_code == 400 and "control characters" in r.json()["error"]
+
+
+def test_failed_logins_are_rate_limited_on_every_login_route(client):
+    signup(client)
+    for _ in range(9):
+        assert client.post("/user/login", json={"email": "a@test.local", "password": "wrong-pass"}).status_code == 401
+    assert client.post("/user/login", json={"email": "a@test.local", "password": "password123"}).status_code == 200  # clears it
+    for _ in range(10):
+        client.post("/user/login", json={"email": "a@test.local", "password": "wrong-pass"})
+    r = client.post("/user/login", json={"email": "a@test.local", "password": "password123"})
+    assert r.status_code == 429  # even the right password waits once 10 attempts failed
+    assert client.post("/api/auth/login", json={"email": "a@test.local", "password": "password123"}).status_code == 429

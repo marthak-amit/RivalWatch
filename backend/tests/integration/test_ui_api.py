@@ -55,7 +55,7 @@ def test_control_characters_in_credentials_are_rejected_not_a_500(client):
     for path in ("/api/auth/login", "/api/auth/signup"):
         for body in ({"email": "a\u0000@test.local", "password": "password123"}, {"email": "a@test.local", "password": "pass\u0000word1"}):
             r = client.post(path, json=body)
-            assert r.status_code == 400 and "invalid characters" in r.json()["error"], (path, r.status_code, r.text)
+            assert r.status_code == 400 and "control characters" in r.json()["error"], (path, r.status_code, r.text)
 
 
 def test_pages_redirect_like_the_original_server(client):

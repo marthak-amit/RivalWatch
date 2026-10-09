@@ -1,14 +1,16 @@
-# Everything runs here: Postgres, migrations, the API (+ Swagger and the RivalWatch UI pages), the crawl worker and
-# the scheduler.  docker --context default compose up -d --build
-x-app: &app
-  build: .
+# Postgres, migrations, the API (+ Swagger and the RivalWatch UI pages), the crawl worker and the scheduler.
+#   docker --context default compose up -d --build
+# Two images: rivalwatch-backend:app (no browser) for api/scheduler/migrate, rivalwatch-backend:worker (with Chromium).
+x-env: &env
   env_file: .env
   environment:
     DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/competitor
     PUBLIC_DIR: /srv/public
-  volumes:
-    - ../public:/srv/public:ro   # the UI's pages, served by the API at /, /login, /app, /admin
-  shm_size: "1gb"                # headless Chrome needs more shared memory than Docker's 64MB default
+
+x-app: &app
+  <<: *env
+  build: {context: ., target: app}
+  image: rivalwatch-backend:app
 
 services:
   db:
@@ -26,6 +28,7 @@ services:
   migrate:
     <<: *app
     command: ["sh", "-c", "alembic upgrade head && python -m competitor_moves.db.site_schema"]
+    healthcheck: {disable: true}
     depends_on:
       db: {condition: service_healthy}
     restart: "no"
@@ -33,16 +36,9 @@ services:
   api:
     <<: *app
     ports: ["${API_PORT:-8031}:8000"]   # http://localhost:8031/docs (Swagger), http://localhost:8031/ (UI)
+    volumes:
+      - ../public:/srv/public:ro       # the UI's pages, served at /, /login, /app, /admin
     restart: unless-stopped
-    depends_on:
-      migrate: {condition: service_completed_successfully}
-
-  worker:
-    <<: *app
-    command: ["python", "-m", "competitor_moves.workers.worker"]
-    healthcheck: {disable: true}
-    restart: unless-stopped
-    stop_grace_period: 60s   # lets the current job finish
     depends_on:
       migrate: {condition: service_completed_successfully}
 
@@ -51,6 +47,16 @@ services:
     command: ["python", "-m", "competitor_moves.workers.scheduler"]
     healthcheck: {disable: true}
     restart: unless-stopped
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+
+  worker:
+    <<: *env
+    build: {context: ., target: worker}
+    image: rivalwatch-backend:worker
+    shm_size: "1gb"                    # headless Chrome needs more shared memory than Docker's 64MB default
+    restart: unless-stopped
+    stop_grace_period: 60s             # lets the current job finish
     depends_on:
       migrate: {condition: service_completed_successfully}
 

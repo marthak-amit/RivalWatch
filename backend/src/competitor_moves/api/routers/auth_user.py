@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
+from ...core import ratelimit
 from ...core.plans import PLANS
 from ...core.security import DUMMY_HASH, hash_password, verify_password
 from ...db.pool import get_conn
@@ -13,10 +14,15 @@ router = APIRouter(prefix="/user", tags=["user"])
 
 def login_as(conn, body: Login, role: str, request: Request) -> dict:
     """Shared by user and admin login; each only accepts its own role."""
+    key = ratelimit.login_key(request.client.host if request.client else None, body.email)
+    if ratelimit.logins.blocked(key):
+        raise HTTPException(429, "Too many attempts. Try again in a few minutes.")
     u = users.find_for_login(conn, body.email, role)
     ok = verify_password(body.password, u["password_hash"] if u else DUMMY_HASH)
     if not (u and ok):
+        ratelimit.logins.fail(key)
         raise HTTPException(401, "Invalid credentials")
+    ratelimit.logins.clear(key)
     if not u["is_active"]:  # only said after the password is right, so it reveals nothing to a guesser
         raise HTTPException(403, "Account disabled")
     return {**sessions.start(conn, u["id"], role, request), "role": role, "email": u["email"]}

@@ -6,20 +6,24 @@ is HttpOnly + SameSite=Lax: the same CSRF defence the original server used.
 import re
 import secrets
 import time
-from collections import defaultdict
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field, StrictBool, field_validator
 
+from ...agents.compare import graph as compare_graph
 from ...config import get_settings
+from ...core import ratelimit
 from ...core.plans import ANNUAL_DISCOUNT, PLANS
 from ...core.security import DUMMY_HASH, TTL, hash_password, verify_password
 from ...db.pool import get_conn
 from ...db.repositories import users
-from ...services import dashboard, sessions, workspaces
+from ...services import comparison, dashboard, pricing, sessions, store_sync, workspaces
 from ...services.product_search import SORT_SQL, Filters, search
 from ..deps import authenticate
+from ..schemas.auth import no_control_chars
 
 COOKIE = "rw_session"
 EMAIL = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]{2,}$")
@@ -37,24 +41,6 @@ def json_only(request: Request) -> None:
 
 
 router = APIRouter(prefix="/api", tags=["ui"], dependencies=[Depends(json_only)])
-
-
-class Limiter:
-    """Login/signup attempts per IP+email. ponytail: in-process, so per worker; use Redis if the API scales out."""
-
-    def __init__(self, max_hits: int = 10, window_sec: int = 300):
-        self.max, self.window, self.hits = max_hits, window_sec, defaultdict(list)
-
-    def hit(self, key: str) -> bool:
-        now = time.monotonic()
-        self.hits[key] = [t for t in self.hits[key] if now - t < self.window] + [now]
-        return len(self.hits[key]) <= self.max
-
-    def reset(self, key: str) -> None:
-        self.hits.pop(key, None)
-
-
-limiter = Limiter()
 
 
 # ---- session helpers ------------------------------------------------------------------------------------------
@@ -104,13 +90,7 @@ class LoginBody(BaseModel):
     email: str = Field("", max_length=254)
     password: str = Field("", max_length=128)
 
-    @field_validator("email", "password")
-    @classmethod
-    def _no_control_chars(cls, v: str) -> str:
-        # a NUL byte makes Postgres raise a DataError (a 500); other control characters are never legitimate here
-        if re.search(r"[\x00-\x1f\x7f]", v):
-            raise ValueError("contains invalid characters")
-        return v
+    _clean = field_validator("email", "password")(no_control_chars)  # a NUL byte would be a Postgres 500
 
 
 class SignupBody(LoginBody):
@@ -133,13 +113,16 @@ def plans():
                         "adminPlanEdit": True, "adminRoleEdit": False, "adminResetCredits": True, "adminResetPassword": True}}
 
 
-def _rate_key(request: Request, email: str) -> str:
-    return f"{request.client.host if request.client else '?'}|{email.strip().lower()}"
+def _ip(request: Request) -> str | None:
+    return request.client.host if request.client else None
 
 
-def _check_rate(request: Request, email: str) -> None:
-    if not limiter.hit(_rate_key(request, email)):
-        raise UiError(429, "Too many attempts. Try again in a few minutes.")
+def _check_clean(*values: str | None) -> None:
+    try:
+        for v in values:
+            no_control_chars(v)
+    except ValueError:
+        raise UiError(400, "Email and password must not contain control characters") from None
 
 
 def _signed_in(conn, request: Request, response: Response, row: dict) -> dict:
@@ -150,20 +133,27 @@ def _signed_in(conn, request: Request, response: Response, row: dict) -> dict:
 
 @router.post("/auth/login")
 def login(body: LoginBody, request: Request, response: Response, conn=Depends(get_conn)):
-    _check_rate(request, body.email)
+    _check_clean(body.email, body.password)
+    key = ratelimit.login_key(_ip(request), body.email)
+    if ratelimit.logins.blocked(key):
+        raise UiError(429, "Too many attempts. Try again in a few minutes.")
     row = users.find_any_role(conn, body.email)
     ok = verify_password(body.password, row["password_hash"] if row else DUMMY_HASH)
     if not (row and ok):
+        ratelimit.logins.fail(key)
         raise UiError(401, "Incorrect email or password")
+    ratelimit.logins.clear(key)
     if not row["is_active"]:
         raise UiError(403, "This account is suspended. Contact support.")
-    limiter.reset(_rate_key(request, body.email))  # only failures count towards the limit
     return _signed_in(conn, request, response, row)
 
 
 @router.post("/auth/signup")
 def signup(body: SignupBody, request: Request, response: Response, conn=Depends(get_conn)):
-    _check_rate(request, body.email)
+    _check_clean(body.email, body.password, body.name)
+    if ratelimit.signups.blocked(_ip(request) or "?"):
+        raise UiError(429, "Too many sign-ups from this address. Try again in a few minutes.")
+    ratelimit.signups.fail(_ip(request) or "?")
     email = body.email.strip().lower()
     if not EMAIL.match(email) or len(email) > 120:
         raise UiError(400, "Enter a valid email address")
@@ -242,6 +232,68 @@ def crawl(u=Depends(ui_user), conn=Depends(get_conn)):
         time.sleep(1)
     new = dashboard.changes(conn, sites, since=started - timedelta(seconds=1))
     return {"skipped": False, "queued": queued, "pending": pending, "changes": len(new)}
+
+
+class StoreBody(BaseModel):
+    url: str = Field(max_length=500)
+    storeCode: str | None = Field(None, max_length=40)
+    token: str | None = Field(None, max_length=500)
+    cron: str | None = None
+
+
+@router.get("/store")
+def get_store(u=Depends(ui_user), conn=Depends(get_conn)):
+    """Our own store (Magento): connection, product count and sync status; null when not connected."""
+    return {"store": store_sync.store_view(conn, u)}
+
+
+@router.put("/store")
+def put_store(body: StoreBody, u=Depends(ui_user), conn=Depends(get_conn)):
+    """Connect (or change) our Magento store. The token is optional (public catalog data needs none), stored encrypted
+    and never returned. The first sync starts at once."""
+    try:
+        store_sync.connect(conn, u, body.url, store_code=body.storeCode, token=body.token, cron=body.cron)
+    except workspaces.WorkspaceError as e:
+        raise UiError(e.status, str(e)) from None
+    return {"store": store_sync.store_view(conn, u)}
+
+
+class StorePatch(BaseModel):
+    storeCode: str | None = Field(None, max_length=40)
+    token: str | None = Field(None, max_length=500)  # "" or null removes it; leave it out to keep it
+    cron: str | None = None
+    enabled: StrictBool | None = None
+
+
+def store_patch(conn, user: dict, body: StorePatch) -> None:
+    kw = {"store_code": body.storeCode, "cron": body.cron, "enabled": body.enabled}
+    if "token" in body.model_fields_set:
+        kw["token"] = body.token
+    try:
+        store_sync.update(conn, user, **kw)
+    except workspaces.WorkspaceError as e:
+        raise UiError(e.status, str(e)) from None
+
+
+@router.patch("/store")
+def patch_store(body: StorePatch, u=Depends(ui_user), conn=Depends(get_conn)):
+    """Change the store's settings without reconnecting: store view, token, sync schedule, pause/resume."""
+    store_patch(conn, u, body)
+    return {"store": store_sync.store_view(conn, u)}
+
+
+@router.post("/store/sync")
+def sync_store(u=Depends(ui_user), conn=Depends(get_conn)):
+    view = store_sync.store_view(conn, u)
+    if not view:
+        raise UiError(404, "No store connected")
+    return {"queued": store_sync.queue_sync(conn, int(view["id"])), "store": store_sync.store_view(conn, u)}
+
+
+@router.delete("/store")
+def delete_store(u=Depends(ui_user), conn=Depends(get_conn)):
+    store_sync.disconnect(conn, u)
+    return {"ok": True}
 
 
 class CompetitorBody(BaseModel):
@@ -339,7 +391,133 @@ def report_summary(body: SummaryBody, u=Depends(ui_user), conn=Depends(get_conn)
     if not r["total"]:
         raise UiError(400, "No changes in this period to summarise")
     in_range = [c for c in chs if c["ts"][:10] >= r["from"] and (not comp or c["competitorId"] == comp)]
+    if get_settings().gemini_api_key and not comp:  # the analyst, over this period (not stored)
+        project = workspaces.get_or_create(conn, u)
+        since = datetime.fromisoformat(r["from"]).replace(tzinfo=UTC)
+        d = compare_graph.run_digest(conn, project, since=since, store=False, force=True)
+        if d:
+            return {"summary": d["summary"], "actions": d["actions"], "source": d["source"]}
     return dashboard.rules_digest(in_range)
+
+
+class CompareSettings(BaseModel):
+    minPrice: float | None = Field(None, ge=0, le=1_000_000)
+    minGroupSize: int | None = Field(None, ge=1, le=50)
+    fxRates: dict[str, float] | None = None  # e.g. {"GBP": 1.27}: 1 GBP = 1.27 of our store's currency
+
+
+def _compare_inputs(conn, u: dict):
+    project = workspaces.get_or_create(conn, u)
+    ours = conn.execute("select * from sites where project_id=%s and role='ours'", (project["id"],)).fetchone()
+    return project, ours, workspaces.competitors(conn, project["id"])
+
+
+@router.get("/comparison")
+def comparison_view(group_by: str = "type", category: str | None = None, competitor: str | None = None,
+                    u=Depends(ui_user), conn=Depends(get_conn)):
+    """Our prices against competitors: by jewellery type (and metal, stone or carat band), exact SKU matches, and what
+    only competitors sell. group_by: type | type,metal | type,stone | type,metal,stone | type,carat."""
+    if group_by not in comparison.GROUP_BY:
+        raise UiError(400, f"group_by must be one of: {', '.join(comparison.GROUP_BY)}")
+    project, ours, comps = _compare_inputs(conn, u)
+    if competitor:
+        comps = [c for c in comps if str(c["id"]) == competitor]
+    return comparison.compare(conn, project, ours, comps, group_by=group_by, category=category)
+
+
+@router.get("/comparison/settings")
+def get_compare_settings(u=Depends(ui_user), conn=Depends(get_conn)):
+    return comparison.settings_of(workspaces.get_or_create(conn, u))
+
+
+@router.patch("/comparison/settings")
+def patch_compare_settings(body: CompareSettings, u=Depends(ui_user), conn=Depends(get_conn)):
+    """minPrice skips cheap test items; minGroupSize is how many products a group needs on each side; fxRates convert
+    competitor currencies into our store's currency (without a rate, those prices are shown but not compared)."""
+    project = workspaces.get_or_create(conn, u)
+    current = dict(project["compare_settings"] or {})
+    if body.minPrice is not None:
+        current["min_price"] = body.minPrice
+    if body.minGroupSize is not None:
+        current["min_group_size"] = body.minGroupSize
+    if body.fxRates is not None:
+        rates = {}
+        for code, rate in body.fxRates.items():
+            if not re.fullmatch(r"[A-Z]{3}", code) or not 0 < rate < 1_000_000:
+                raise UiError(400, f"fxRates: '{code}' needs a 3-letter currency code and a positive rate")
+            rates[code] = rate
+        current["fx_rates"] = rates
+    conn.execute("update projects set compare_settings=%s where id=%s", (Jsonb(current), project["id"]))
+    return comparison.settings_of({**project, "compare_settings": current})
+
+
+# ---- our prices in Magento (M7) -------------------------------------------------------------------------------
+
+class PriceBody(BaseModel):
+    sku: str = Field(min_length=1, max_length=64)
+    newPrice: Decimal = Field(gt=0, lt=10_000_000, decimal_places=2)
+
+
+class PriceSettings(BaseModel):
+    maxChangePct: float | None = Field(None, gt=0, le=1000)
+    minMarginPct: float | None = Field(None, ge=0, lt=100)
+
+
+def priced(fn, *args, **kw):
+    """Call a pricing service function, turning its errors into the UI's {"error"} responses."""
+    try:
+        return fn(*args, **kw)
+    except workspaces.WorkspaceError as e:
+        raise UiError(e.status, str(e)) from None
+
+
+PRICE_STATUS = Query(None, pattern="^(pending|applied|failed|cancelled)$")
+
+
+@router.get("/prices")
+def list_prices(status: str | None = PRICE_STATUS, u=Depends(ui_user), conn=Depends(get_conn)):
+    """Price changes for our store, newest first, and the guardrails that apply."""
+    project = workspaces.get_or_create(conn, u)
+    return {"changes": pricing.list_changes(conn, project_id=project["id"], status=status),
+            "settings": pricing.settings_of(project)}
+
+
+@router.post("/prices")
+def request_price(body: PriceBody, u=Depends(ui_user), conn=Depends(get_conn)):
+    """Ask for a new regular price for one of our SKUs. Nothing changes in Magento yet: the change is pending and comes
+    back with a preview (live price and cost, margin, where it puts us against competitors). Apply it to make it real."""
+    project = workspaces.get_or_create(conn, u)
+    return priced(pricing.request, conn, project, u, body.sku.strip(), body.newPrice)
+
+
+@router.post("/prices/{change_id}/apply")
+def apply_price(change_id: int, u=Depends(ui_user), conn=Depends(get_conn)):
+    """Write the price to Magento. 502 (and status failed) if Magento refuses: then nothing changed anywhere."""
+    return {"change": priced(pricing.apply, conn, workspaces.get_or_create(conn, u), change_id, u)}
+
+
+@router.post("/prices/{change_id}/cancel")
+def cancel_price(change_id: int, u=Depends(ui_user), conn=Depends(get_conn)):
+    return {"change": priced(pricing.cancel, conn, workspaces.get_or_create(conn, u), change_id)}
+
+
+@router.post("/prices/{change_id}/revert")
+def revert_price(change_id: int, u=Depends(ui_user), conn=Depends(get_conn)):
+    """Put back the price an applied change replaced (a new change, applied at once unless only the agency applies)."""
+    return priced(pricing.revert, conn, workspaces.get_or_create(conn, u), change_id, u)
+
+
+@router.get("/prices/settings")
+def get_price_settings(u=Depends(ui_user), conn=Depends(get_conn)):
+    return pricing.settings_of(workspaces.get_or_create(conn, u))
+
+
+@router.patch("/prices/settings")
+def patch_price_settings(body: PriceSettings, u=Depends(ui_user), conn=Depends(get_conn)):
+    """maxChangePct: the most one change may move a price; minMarginPct: the lowest margin over cost allowed (when
+    Magento has a cost). Locked when the agency applies changes for this store (adminOnly)."""
+    return priced(pricing.update_settings, conn, workspaces.get_or_create(conn, u), u,
+                  max_change_pct=body.maxChangePct, min_margin_pct=body.minMarginPct)
 
 
 @router.get("/products")
@@ -348,13 +526,17 @@ def products(competitor: str | None = None, category: str | None = None, metal: 
              max_price: float | None = Query(None, ge=0), on_sale: bool | None = None, in_stock: bool | None = None,
              q: str | None = Query(None, max_length=100), sort: str = "relevance", limit: int = Query(50, ge=1, le=200),
              offset: int = Query(0, ge=0, le=10_000), u=Depends(ui_user), conn=Depends(get_conn)):
-    """Products collected from your competitors, filtered like a shop's own category page."""
+    """Products collected from your competitors (or `competitor=ours` for our own store), filtered like a shop's own
+    category page."""
     if sort not in SORT_SQL:
         raise UiError(400, f"sort must be one of: {', '.join(SORT_SQL)}")
     project = workspaces.get_or_create(conn, u)
-    sites = workspaces.competitors(conn, project["id"])
-    if competitor:
-        sites = [s for s in sites if str(s["id"]) == competitor]
+    if competitor == "ours":  # our own store's catalog
+        sites = conn.execute("select * from sites where project_id=%s and role='ours'", (project["id"],)).fetchall()
+    else:
+        sites = workspaces.competitors(conn, project["id"])
+        if competitor:
+            sites = [s for s in sites if str(s["id"]) == competitor]
     return search(conn, sites, Filters(category, metal, gem, stone, min_price, max_price, on_sale, in_stock, q, sort),
                   limit=limit, offset=offset)
 

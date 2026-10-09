@@ -72,7 +72,7 @@ def try_page(url: str, show_markdown: bool) -> int:
         print(f"  fetch failed: {e}")
         return 1
     html = page.text()
-    print(f"\n== fetched with Scrapling in {time.monotonic() - t:.1f}s")
+    print(f"\n== fetched (curl_cffi, parsed with Scrapling) in {time.monotonic() - t:.1f}s")
     print(f"  status {page.status} | final URL {page.url} | {page.content_type or '?'} | {len(page.body):,} bytes")
     meta = extract.page_meta(html, page.url)
     print(f"  platform: {platforms.detect(html)} | title: {meta['title']} | h1: {meta['h1']}")
@@ -132,7 +132,7 @@ def try_site(url: str, max_products: int, page_budget: int, use_ai: bool, twice:
             print(f"\n== result: {r['status'].upper()} in {time.monotonic() - t:.0f}s | pages fetched {run['pages_fetched']} "
                   f"({run['pages_failed']} failed) | products {run['products_seen']} | est. catalog size {run['est_total_products'] or '?'}"
                   f" | stop: {run['stop_reason'] or '-'} | models: {run['models']}")
-            print("\n== what the agent did (each tool call; the pages are fetched with Scrapling)")
+            print("\n== what the agent did (each tool call; pages fetched with curl_cffi and parsed with Scrapling)")
             for step in run["trace"]:
                 if "tool" in step:
                     args = f"({', '.join(map(str, step['args']))})" if step["args"] else "()"
