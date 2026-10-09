@@ -85,12 +85,19 @@ The integration works around each of these; none requires a UI change when they'
    plus plan/role edits, `reset-credits`, `reset-password`, and an audit log.
 5. **Scrape result** has no `description` (meta description), so the company profile falls back to the first paragraph.
 6. **Disabled accounts** get the same `401 Invalid credentials` as a wrong password, so the UI can't say "account disabled".
-7. **Dashboard crawls aren't metered for demo sites**, and scheduled crawls keep running for a suspended user's
+7. **A NUL byte in the email returns 500** from `POST /user/login`, `/admin/login` and `/user/signup`
+   (`psycopg.DataError: PostgreSQL text fields cannot contain NUL (0x00) bytes`). The UI server now rejects control
+   characters before calling the backend, but direct API callers still hit it; reject them in the `Credentials`/`Login` schemas.
+8. **No login rate limiting on the backend itself.** The UI server limits attempts (10 failures per 5 min per IP+email),
+   but anyone calling `/user/login` directly is unlimited.
+9. **Dashboard crawls aren't metered for demo sites**, and scheduled crawls keep running for a suspended user's
    workspace until their API key is rejected (the backend rejects it, so those crawls just fail).
 
 ## Verifying it
 
 * `npm test`: unit tests, including the integration layer against an in-process fake of the backend's contract.
+* `npm run test:auth`: login/logout checks (58 standalone, 61 against the real backend: cookies, server-side session revocation,
+  replay of old cookies, multiple devices, suspension, rate limiting, input handling). Works in both modes.
 * `npm run test:integration`: end-to-end against a **real** backend (see `integration/README.md`): 53 checks across
   auth, sessions, real crawls through the worker, credits, change detection, robots.txt/SSRF errors, the `/v1` proxy,
   and the admin panel.

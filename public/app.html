@@ -98,6 +98,7 @@
   .sdot.wait { background:var(--mute); box-shadow:0 0 0 3px color-mix(in srgb, var(--mute) 25%, transparent); }
   @keyframes sping { 0% { box-shadow:0 0 0 0 color-mix(in srgb, var(--good) 55%, transparent); } 70%, 100% { box-shadow:0 0 0 7px transparent; } }
   @media (prefers-reduced-motion: reduce) { .sdot.on { animation:none; } }
+  #offline { position:fixed; top:12px; left:50%; transform:translateX(-50%); z-index:70; background:var(--bad); color:#fff; font-weight:600; font-size:14px; padding:8px 16px; border-radius:99px; box-shadow:0 8px 24px rgba(0,0,0,.25); }
   .dim { opacity:.5; filter:grayscale(.7); transition:opacity .2s; }
   .clamp { display:-webkit-box; -webkit-line-clamp:3; line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
   .kv { display:grid; grid-template-columns:104px 1fr; gap:8px; padding:6px 0; border-top:1px solid var(--line); font-size:13px; } .kv .k { color:var(--mute); } .kv .v2 { display:flex; flex-wrap:wrap; gap:6px; align-items:center; min-width:0; overflow-wrap:anywhere; }
@@ -132,6 +133,7 @@
   </div>
 </div>
 <div id="tip" role="tooltip"></div>
+<div id="offline" role="status" hidden>Can't reach the server. Retrying…</div>
 
 <script src="/common.js"></script>
 <script>
@@ -553,7 +555,8 @@ function tickTimer() {
   $('sNext').textContent = `Auto-crawl: ${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
 }
 setInterval(tickTimer, 1000);
-setInterval(() => { if (!document.hidden) refresh().catch(() => {}); }, 5000);
+const setOffline = (v) => { $('offline').hidden = !v; };
+setInterval(() => { if (!document.hidden) refresh().then(() => setOffline(false)).catch(() => setOffline(true)); }, 5000);
 window.addEventListener('hashchange', () => { const t = location.hash.slice(1); if (TITLES[t] && t !== tab) go(t); });
 buildNav(); paintShell();
 api('/api/plans', { noRedirect: true }).then((d) => { d.plans.forEach((p) => PLANS[p.id] = p); CAPS = d.backend || {}; if (tab === 'demo' && !can('demo')) tab = 'overview'; renderNav(); return refresh(true); });

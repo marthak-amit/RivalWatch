@@ -114,3 +114,36 @@ test('workspaces hold only real data by default; sample history is strictly opt-
   const noSample = new Workspaces(3000, { demo: true }).get({ ...user, id: 'u3' });
   assert.equal(noSample.monitor.state.changes.length, 0, 'demo competitors alone do not bring fabricated history');
 });
+
+import { credentialProblem } from '../lib/backend.js';
+import { Limiter } from '../lib/users.js';
+
+test('credentialProblem keeps control characters and oversized input away from the backend', () => {
+  assert.equal(credentialProblem('a@b.co', 'password123'), null);
+  assert.match(credentialProblem('nul\u0000l@x.com', 'pw'), /invalid characters/);
+  assert.match(credentialProblem('a@b.co', 'pw\u0007'), /invalid characters/);
+  assert.match(credentialProblem(['x'], { a: 1 }), /Enter your email/);
+  assert.equal(credentialProblem('a'.repeat(300) + '@x.com', 'p'), 'Incorrect email or password', 'login does not hint at limits');
+  assert.match(credentialProblem('a@b.co', 'p'.repeat(200), { forSignup: true }), /too long/);
+});
+
+test('Backend retries a stale pooled connection once, but only for calls that are safe to repeat', async () => {
+  const real = globalThis.fetch; let calls = 0;
+  const staleThenOk = (code) => async () => { calls++; if (calls === 1) throw Object.assign(new TypeError('fetch failed'), { cause: { code } }); return new Response('{"ok":true}', { status: 200, headers: { 'content-type': 'application/json' } }); };
+  try {
+    const b = new Backend('http://backend.test');
+    calls = 0; globalThis.fetch = staleThenOk('UND_ERR_SOCKET'); assert.equal((await b.json('GET', '/x')).status, 200); assert.equal(calls, 2, 'GET retried after a stale socket');
+    calls = 0; globalThis.fetch = staleThenOk('ECONNRESET'); assert.equal((await b.json('POST', '/user/login', { body: {}, retry: true })).status, 200); assert.equal(calls, 2, 'login retried');
+    calls = 0; globalThis.fetch = staleThenOk('ECONNRESET'); await assert.rejects(b.json('POST', '/user/signup', { body: {} }), (e) => e.status === 503); assert.equal(calls, 1, 'signup is NOT retried (could double-apply)');
+    calls = 0; globalThis.fetch = staleThenOk('ECONNREFUSED'); await assert.rejects(b.json('GET', '/x'), (e) => e.status === 503); assert.equal(calls, 1, 'a refused connection (backend down) is not retried');
+    calls = 0; globalThis.fetch = async () => { calls++; throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNRESET' } }); };
+    await assert.rejects(b.json('GET', '/x'), (e) => e.status === 503); assert.equal(calls, 2, 'gives up after one retry');
+  } finally { globalThis.fetch = real; }
+});
+
+test('rate limiter: failures add up, a success forgets them', () => {
+  const l = new Limiter(3, 60_000);
+  assert.ok(l.hit('k') && l.hit('k') && l.hit('k')); assert.equal(l.hit('k'), false, '4th attempt is blocked');
+  l.reset('k'); assert.ok(l.hit('k'), 'reset after a successful login');
+  assert.ok(l.hit('other'), 'other keys are independent');
+});

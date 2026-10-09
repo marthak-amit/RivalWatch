@@ -7,7 +7,8 @@
     "start": "node server.js",
     "test": "node --test",
     "dev": "node --watch server.js",
-    "test:integration": "node integration/backend.integration.mjs"
+    "test:integration": "node integration/backend.integration.mjs",
+    "test:auth": "node integration/auth.integration.mjs"
   },
   "engines": {
     "node": ">=20"

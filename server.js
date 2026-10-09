@@ -8,7 +8,7 @@ import { Workspaces } from './lib/workspace.js';
 import * as testsite from './lib/testsite.js';
 import { buildReport } from './lib/reports.js';
 import { makeDigest } from './lib/digest.js';
-import { Backend, BackendError, BackendIdentity, RemoteCrawler, RoutingCrawler, toAdminRow } from './lib/backend.js';
+import { Backend, BackendError, BackendIdentity, RemoteCrawler, RoutingCrawler, credentialProblem, toAdminRow } from './lib/backend.js';
 
 const PORT = +process.env.PORT || 3000;
 const HOST = process.env.HOST || '127.0.0.1';
@@ -83,6 +83,10 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 
 
 const meView = (u) => ({ ...publicUser(u), apiKey: u.apiKey, plan: u.plan, planInfo: PLANS[u.plan], ...(BACKEND ? { credits: u.credits } : {}) });
 
+const UNAVAILABLE_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="refresh" content="5"><title>Temporarily unavailable: RivalWatch</title>
+<style>body{font:16px/1.5 system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;margin:0;background:#f7f8fa;color:#14171f}main{max-width:420px;padding:24px;text-align:center}h1{font-size:22px}p{color:#657085}a{color:#4f46e5;font-weight:600}@media(prefers-color-scheme:dark){body{background:#0e1015;color:#eef0f4}p{color:#9aa4b5}a{color:#8b87ff}}</style></head>
+<body><main><h1>We can't reach the service right now</h1><p>This page will retry automatically. If it keeps happening, try again in a few minutes.</p><p><a href="">Try again now</a> · <a href="/">Home</a></p></main></body></html>`;
+
 // ---- routes ---------------------------------------------------------------------
 http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
@@ -91,7 +95,11 @@ http.createServer(async (req, res) => {
   try {
     // pages
     if (M === 'GET' && PAGES[p]) {
-      const user = await currentUser(req);
+      let user;
+      if (p === '/app' || p === '/admin') { // only these need to know who you are; public pages never touch the backend
+        try { user = await currentUser(req); }
+        catch (e) { if (e instanceof BackendError) return send(res, 503, UNAVAILABLE_PAGE, 'text/html; charset=utf-8', { 'retry-after': '5' }); throw e; } // backend down: a friendly page, not raw JSON
+      }
       if (p === '/app' && !user) return redirect(res, '/login');
       if (p === '/admin' && user?.role !== 'admin') return redirect(res, user ? '/app' : '/login');
       const f = PAGES[p];
@@ -129,7 +137,8 @@ http.createServer(async (req, res) => {
     if (M !== 'GET' && !/^application\/json/.test(req.headers['content-type'] || '')) return fail(res, 415, 'JSON body required');
 
     // public
-    if (p === '/api/session' && M === 'GET') { const u = await currentUser(req); return send(res, 200, { user: u ? meView(u) : null }); }
+    // backend outage: report 'signed out' instead of an error, so public pages keep working
+    if (p === '/api/session' && M === 'GET') { const u = await currentUser(req).catch((e) => { if (e instanceof BackendError) return null; throw e; }); return send(res, 200, { user: u ? meView(u) : null }); }
     if (p === '/api/plans' && M === 'GET') {
       const pair = (v) => { const [email, ...pw] = String(v || '').split(':'); return email && pw.length ? { email, password: pw.join(':') } : null; };
       if (BACKEND) return send(res, 200, { plans: Object.values(PLANS), annualDiscount: ANNUAL_DISCOUNT, demo: { user: pair(process.env.DEMO_USER), admin: pair(process.env.DEMO_ADMIN) },
@@ -141,11 +150,15 @@ http.createServer(async (req, res) => {
     }
     if ((p === '/api/auth/login' || p === '/api/auth/signup') && M === 'POST') {
       const b = await readJson(req);
-      if (!authLimiter.hit(req.socket.remoteAddress + '|' + normEmail(b.email))) return fail(res, 429, 'Too many attempts. Try again in a few minutes.');
+      const limitKey = req.socket.remoteAddress + '|' + normEmail(b.email);
+      if (!authLimiter.hit(limitKey)) return fail(res, 429, 'Too many attempts. Try again in a few minutes.');
       if (BACKEND) { // one form, both roles; the backend token lives in the HttpOnly cookie
-        const email = String(b.email ?? '').trim(), pw = String(b.password ?? '');
+        const email = typeof b.email === 'string' ? b.email.trim() : b.email, pw = b.password;
+        const bad = credentialProblem(email, pw, { forSignup: p.endsWith('signup') });
+        if (bad) return fail(res, p.endsWith('signup') ? 400 : 401, bad);
         const s = p.endsWith('login') ? await BACKEND.login(email, pw) : await BACKEND.signup(email, pw);
         if (p.endsWith('signup')) log({ email }, 'signup', { email });
+        authLimiter.reset(limitKey); // only failed attempts count toward the limit
         const maxAge = Math.max(60, Math.min(7 * 86400, Math.floor((Date.parse(s.expires_at) - Date.now()) / 1000) || 86400));
         return send(res, 200, { redirect: s.role === 'admin' ? '/admin' : '/app', user: { email: s.email, role: s.role } }, 'application/json', setSession(req, s.token, maxAge));
       }
@@ -159,6 +172,7 @@ http.createServer(async (req, res) => {
         try { u = users.create({ email: b.email, name: b.name, password: b.password, plan }); } catch (e) { return fail(res, 400, e.message); }
         log(u, 'signup', u, `plan ${plan}`);
       }
+      authLimiter.reset(limitKey); // only failed attempts count toward the limit
       users.update(u.id, { lastLoginAt: new Date().toISOString() });
       return send(res, 200, { redirect: u.role === 'admin' ? '/admin' : '/app', user: publicUser(u) }, 'application/json', setSession(req, sessions.create(u.id)));
     }

@@ -27,3 +27,15 @@ npm run test:integration
 SSRF allow-list, the same way the backend's own tests do. Nothing in `backend/` is changed.
 
 Environment: `NODE_URL` (default `http://127.0.0.1:3000`), `ADMIN_EMAIL`, `ADMIN_PASSWORD`.
+
+## Login / logout only
+
+`npm run test:auth` runs `auth.integration.mjs` against whatever server `NODE_URL` points at. It detects standalone vs backend mode itself.
+In standalone mode it uses the built-in demo accounts; with a backend, pass the admin you created:
+
+```bash
+NODE_URL=http://127.0.0.1:3000 ADMIN_EMAIL=boss@rivalwatch.test ADMIN_PASSWORD='admin-pass-12345' npm run test:auth
+```
+
+Note: the login limiter counts failures per account+IP (10 per 5 minutes), so re-running against the same server immediately is fine, but
+hammering one account with wrong passwords will (correctly) return 429 until the window passes.
