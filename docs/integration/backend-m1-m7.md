@@ -12,7 +12,9 @@ price comparison with an AI digest, and changing our own prices in Magento.
 ## Part A: What was built
 
 ### M0: Foundation
-- FastAPI app, Postgres 16, Alembic migrations, everything in Docker Compose: `db`, `migrate`, `api`, `worker`, `scheduler`.
+- FastAPI app, Postgres 16, Alembic migrations, everything in Docker Compose: `db`, `migrate`, `api`, `worker`, `scheduler`, `browser`.
+  The browser (Chromium, the heavy part) can run on another computer and is reached by IP (`BROWSER_WS_URL`); the UI is
+  unaffected. Setup: `backend/README.md` → "The browser on another computer".
 - **Accounts and roles**: `user` (self sign-up) and `admin` (created only in the database). Passwords hashed with scrypt.
 - **Sessions**: every login is a row in `sessions`. Logout revokes the token. Inactivity ends a session (30 min for admins,
   8 h for users), and so do expiry (12 h / 7 days) and suspension. Admins see per-user session time.

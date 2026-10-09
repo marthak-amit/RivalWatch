@@ -1,6 +1,10 @@
-# Postgres, migrations, the API (+ Swagger and the RivalWatch UI pages), the crawl worker and the scheduler.
-#   docker --context default compose up -d --build
-# Two images: rivalwatch-backend:app (no browser) for api/scheduler/migrate, rivalwatch-backend:worker (with Chromium).
+# Postgres, migrations, the API (+ Swagger and the RivalWatch UI pages), the crawl worker, the scheduler, and the browser.
+#   everything (a server, or this computer):  docker --context default compose up -d --build
+#       .env: BROWSER_SERVER_SECRET=<secret> and BROWSER_WS_URL=ws://browser:3000/<same secret>
+#   only the browser (to serve another machine): docker --context default compose up -d --build browser
+#   the browser on another computer:          docker --context default compose up -d --build db migrate api scheduler worker
+#       (set BROWSER_WS_URL=ws://<that computer's IP>:3000/<secret>)
+# Images: rivalwatch-backend:app (api/scheduler/migrate), :worker (crawls, no browser inside), :browser (Chromium).
 x-env: &env
   env_file: .env
   environment:
@@ -51,14 +55,23 @@ services:
       migrate: {condition: service_completed_successfully}
 
   worker:
-    <<: *env
+    <<: *env                           # BROWSER_WS_URL in .env says where the browser is
     build: {context: ., target: worker}
     image: rivalwatch-backend:worker
-    shm_size: "1gb"                    # headless Chrome needs more shared memory than Docker's 64MB default
     restart: unless-stopped
     stop_grace_period: 60s             # lets the current job finish
     depends_on:
       migrate: {condition: service_completed_successfully}
+
+  browser:                             # the heavy part: run it on your own computer, the worker connects by IP
+    build: {context: ., target: browser}
+    image: rivalwatch-backend:browser
+    environment:
+      BROWSER_SERVER_SECRET: ${BROWSER_SERVER_SECRET:-}
+    ports: ["${BROWSER_PORT:-3000}:3000"]   # reachable at ws://<this computer's IP>:3000/<secret>; firewall it to your server
+    shm_size: "1gb"                    # headless Chrome needs more shared memory than Docker's 64MB default
+    init: true                         # reaps the browser processes the server starts
+    restart: unless-stopped
 
 volumes:
   pgdata:
