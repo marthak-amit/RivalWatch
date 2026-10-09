@@ -103,3 +103,14 @@ test('RoutingCrawler keeps demo pages local and sends everything else to the bac
   assert.deepEqual(seen, ['local:http://localhost:3000/test/1/acme/', 'remote:https://rival.example/']);
   assert.equal((await rc.waitForJob(a.job_id)).from, 'local_job'); assert.equal((await rc.waitForJob(b.job_id)).from, 'remote_job');
 });
+
+import { Workspaces } from '../lib/workspace.js';
+test('workspaces hold only real data by default; sample history is strictly opt-in', () => {
+  const user = { id: 'u1', plan: 'starter', apiKey: 'k' };
+  const real = new Workspaces(3000, { demo: false }).get(user);
+  assert.equal(real.monitor.competitors.length, 0); assert.equal(real.monitor.state.changes.length, 0); assert.equal(real.monitor.state.crawlLog.filter((r) => r.sample).length, 0);
+  const demo = new Workspaces(3000, { demo: true, sampleHistory: true }).get({ ...user, id: 'u2' });
+  assert.ok(demo.monitor.state.changes.length > 0 && demo.monitor.state.changes.every((c) => c.sample), 'sample rows exist only when asked for, and are flagged');
+  const noSample = new Workspaces(3000, { demo: true }).get({ ...user, id: 'u3' });
+  assert.equal(noSample.monitor.state.changes.length, 0, 'demo competitors alone do not bring fabricated history');
+});

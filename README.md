@@ -32,7 +32,7 @@ Demo logins (seeded on first run): `demo@rivalwatch.dev` / `demo1234` · `admin@
 
 **Overview** has a competitor filter (chips, or a dropdown beyond 6 competitors). *All competitors* shows a side-by-side comparison table (products, price range, promos, pages, changes, last change; click a row to drill in). Selecting one competitor scopes the KPIs, chart, recent changes and AI summary to it, and shows its current pricing with the last change per plan, promotions, tracked pages and price history. The filter carries over to Reports and survives a reload.
 
-**Reports** show changes per day (stacked: product & price vs pages & promotions), deltas vs the previous period, by-competitor breakdown, biggest price moves, highlights, an on-demand AI summary, CSV export and print/PDF. New workspaces are pre-loaded with ~30 days of clearly-labelled *sample* history so reports aren't empty in the demo; Reset in Live demo restores it.
+**Reports** show changes per day (stacked: product & price vs pages & promotions), deltas vs the previous period, by-competitor breakdown, biggest price moves, highlights, an on-demand AI summary, CSV export and print/PDF. Dashboards show **real data only**: reports fill up as crawls detect real changes. For screenshots or demos, `DEMO_DATA=1` opts in to ~30 days of clearly-labelled *sample* history and six fake customers in the admin panel.
 
 Every user gets an isolated workspace: own crawl credits, own monitor, and own editable copies of three test competitors.
 Billing is a mock: switching plans just resets the credit allowance.
@@ -43,7 +43,7 @@ Billing is a mock: switching plans just resets the credit allowance.
 sessions, the admin user list and the public `/v1` crawl API then come from the backend (real Postgres accounts, credits and API keys),
 and competitor sites are crawled by the backend's worker (credits, robots.txt, SSRF protection). The monitoring pipeline
 (snapshots, changes, digests, reports) still runs here until the backend has those endpoints. Real accounts start with an empty
-workspace; *Live demo → Load demo competitors* adds the editable test sites. Full details, route mapping and the list of what the
+workspace and only real data (no Live demo tab; `DEMO_COMPETITORS=1` brings the editable test sites back). Full details, route mapping and the list of what the
 backend still needs: [docs/integration/backend-integration.md](docs/integration/backend-integration.md). End-to-end check:
 `npm run test:integration` ([integration/README.md](integration/README.md)).
 
@@ -67,6 +67,7 @@ curl -H "$K" localhost:3000/v1/web/crawl/<job_id>                            # p
 
 | Var | Meaning |
 |---|---|
+| `DEMO_DATA` | `1` opts in to fabricated data (sample report history, fake admin customers). Off by default: only real data is shown |
 | `ANTHROPIC_API_KEY` | Claude writes the digest (`DIGEST_MODEL`, default `claude-sonnet-5-5`); otherwise a rule-based digest is used |
 | `CRAWL_INTERVAL_SEC`, `PORT`, `HOST`, `ADMIN_PASSWORD`, `DATA_DIR` | scheduler interval (default 300), port, bind address, admin password, where `users.json` is stored |
 

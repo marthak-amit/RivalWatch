@@ -36,7 +36,8 @@ BACKEND_URL=http://localhost:8000 npm start        # http://localhost:3000
 | Env | Meaning |
 |---|---|
 | `BACKEND_URL` | Turns the integration on. Unset = standalone demo. |
-| `DEMO_COMPETITORS` | `1`/`0`. Whether new workspaces start with the three editable demo competitors. Default: on standalone, **off** with a backend (real accounts start empty; *Live demo → Load demo competitors* adds them). |
+| `DEMO_COMPETITORS` | `1`/`0`. Whether new workspaces start with the three editable demo competitors. Default: on standalone, **off** with a backend (real accounts start empty and the *Live demo* tab is hidden; set `DEMO_COMPETITORS=1` to bring it back). |
+| `DEMO_DATA` | `1` opts in to fabricated data (sample report history, fake admin customers). Default off, so every screen shows real data. |
 | `DEMO_USER`, `DEMO_ADMIN` | Optional `email:password` shown as one-click buttons on the login page. |
 
 Worker required: crawl jobs sit in `queued` until the backend's worker container is running. The UI says

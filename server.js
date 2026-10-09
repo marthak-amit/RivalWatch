@@ -21,10 +21,12 @@ const PUBLIC = path.resolve('public');
 const BACKEND = process.env.BACKEND_URL ? new Backend(process.env.BACKEND_URL) : null;
 const identity = BACKEND ? new BackendIdentity(BACKEND) : null;
 // Demo competitors (editable test sites) are on by default standalone, off for real backend accounts.
+// DEMO_DATA=1 opts in to fabricated data (pre-loaded report history, sample customers). Default: real data only.
+const DEMO_DATA = process.env.DEMO_DATA === '1';
 const DEMO_COMPETITORS = process.env.DEMO_COMPETITORS ? process.env.DEMO_COMPETITORS !== '0' : !BACKEND;
 const users = new UserStore(path.resolve(process.env.DATA_DIR || 'data', 'users.json'));
 const sessions = new Sessions();
-const workspaces = new Workspaces(PORT, { demo: DEMO_COMPETITORS, makeCrawler: BACKEND
+const workspaces = new Workspaces(PORT, { demo: DEMO_COMPETITORS, sampleHistory: DEMO_DATA, makeCrawler: BACKEND
   ? (local, ws) => { local.credits = Infinity; return new RoutingCrawler(local, new RemoteCrawler(BACKEND, () => ws.user.apiKey)); } // demo pages local, real sites via the backend
   : undefined });
 const authLimiter = new Limiter();
@@ -37,7 +39,7 @@ if (!BACKEND && !users.list().length) {
   users.create({ email: 'admin@rivalwatch.dev', name: 'Ada Admin', password: ADMIN_PW, plan: 'business', role: 'admin', createdAt: ago(60), lastLoginAt: ago(0) });
   users.create({ email: 'demo@rivalwatch.dev', name: 'Dana Demo', password: DEMO_PW, plan: 'pro', createdAt: ago(21), lastLoginAt: ago(1) });
   const rand = () => 'x' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2); // seeded customers can't sign in
-  [['maria@northwind.example', 'Maria Santos', 'business', 'active', 40, 2], ['li@brightly.example', 'Li Wei', 'pro', 'active', 28, 0],
+  if (DEMO_DATA) [['maria@northwind.example', 'Maria Santos', 'business', 'active', 40, 2], ['li@brightly.example', 'Li Wei', 'pro', 'active', 28, 0],
    ['tom@pixelforge.example', 'Tom Becker', 'starter', 'active', 19, 5], ['priya@loomly.example', 'Priya Nair', 'pro', 'active', 12, 1],
    ['sam@tinyhq.example', 'Sam Ortiz', 'starter', 'suspended', 9, 8], ['ana@cobalt.example', 'Ana Kovac', 'starter', 'active', 3, 0]]
     .forEach(([email, name, plan, status, c, l]) => users.create({ email, name, plan, status, password: rand() + rand(), createdAt: ago(c), lastLoginAt: ago(l) }));
@@ -132,7 +134,7 @@ http.createServer(async (req, res) => {
       const pair = (v) => { const [email, ...pw] = String(v || '').split(':'); return email && pw.length ? { email, password: pw.join(':') } : null; };
       if (BACKEND) return send(res, 200, { plans: Object.values(PLANS), annualDiscount: ANNUAL_DISCOUNT, demo: { user: pair(process.env.DEMO_USER), admin: pair(process.env.DEMO_ADMIN) },
         // what the backend can't do yet; the UI hides or disables these instead of failing
-        backend: { enabled: true, signupName: false, planChanges: false, rotateKey: false, adminPlanEdit: false, adminRoleEdit: false, adminResetCredits: false, adminResetPassword: false } });
+        backend: { enabled: true, demo: DEMO_COMPETITORS, signupName: false, planChanges: false, rotateKey: false, adminPlanEdit: false, adminRoleEdit: false, adminResetCredits: false, adminResetPassword: false } });
       return send(res, 200, { plans: Object.values(PLANS), annualDiscount: ANNUAL_DISCOUNT,
         demo: { user: users.byEmail('demo@rivalwatch.dev') ? { email: 'demo@rivalwatch.dev', password: DEMO_PW } : null,
           admin: !process.env.ADMIN_PASSWORD ? { email: 'admin@rivalwatch.dev', password: ADMIN_PW } : null } });
@@ -240,7 +242,7 @@ http.createServer(async (req, res) => {
         for (const c of missing) { if (ws.monitor.competitors.length >= plan.competitors) break; ws.monitor.add(c); added++; }
         if (missing.length && !added) return fail(res, 403, `Your ${plan.name} plan allows ${plan.competitors} competitors. Remove one to load the demo competitors.`);
         const real = ws.monitor.competitors.filter((c) => !c.site).map((c) => c.id); // real competitors keep their history
-        ws.monitor.reset(real); ws.monitor.seedHistory();
+        ws.monitor.reset(real); if (DEMO_DATA) ws.monitor.seedHistory();
         if (!BACKEND) ws.crawler.credits = plan.credits;
         await ws.monitor.run(ws.monitor.competitors.filter((c) => c.site).map((c) => c.id)); // re-baseline the demo sites only
         return send(res, 200, { ok: true });

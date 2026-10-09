@@ -265,7 +265,7 @@ function digestBody(d) {
 function digestCard() {
   const d = S.digest;
   return el('div', { class: 'card' }, el('div', { class: 'h-sec' }, 'Latest AI digest ', el('span', { style: 'text-transform:none;letter-spacing:0' }, d ? '· ' + (d.source === 'claude' ? 'Claude' : 'rule-based') : '')),
-    d ? digestBody(d) : el('p', { class: 'mute' }, 'No digest yet. Open Live demo, edit a competitor page, then crawl.'));
+    d ? digestBody(d) : el('p', { class: 'mute' }, can('demo') ? 'No digest yet. Open Live demo, edit a competitor page, then crawl.' : 'No digest yet. One is written after a crawl that detects changes.'));
 }
 const changeItem = (c) => el('li', {}, el('span', { class: 'tag ' + c.type }, TYPE_LABEL[c.type] || c.type), el('b', {}, c.competitor + ': '), c.label,
   el('div', { class: 'small mute' }, fmtTime(c.ts), c.sample && el('span', { class: 'pill', style: 'margin-left:8px', title: 'Pre-loaded demo history' }, 'sample')));
@@ -295,8 +295,8 @@ function overviewAll(w) {
     el('div', { style: 'margin-bottom:14px' }, activityCard(w, { weekly: true, linkToReports: true })),
     el('div', { class: 'card', style: 'margin-bottom:14px' }, el('div', { class: 'h-sec' }, 'Competitor comparison · click a row for details'),
       S.competitors.length ? el('div', { class: 'scroll' }, el('table', { class: 't' }, el('thead', {}, el('tr', {}, ['Competitor', 'Products', 'Price range', 'Promos', 'Pages', 'Changes (7d)', 'Last change', ''].map((h, i) => el('th', { class: i > 0 && i < 7 ? 'n' : '' }, h)))), el('tbody', {}, rows)))
-        : el('div', {}, el('p', { class: 'mute' }, 'No competitors yet. Add a real competitor site to start tracking, or load three demo competitors you can edit live.'),
-          el('div', { class: 'row wrapx', style: 'margin-top:10px' }, el('button', { class: 'btn primary', onclick: () => { go('competitors'); setTimeout(() => $('cn')?.focus(), 50); } }, 'Add a competitor'), el('button', { class: 'btn', onclick: resetDemo }, 'Load demo competitors')))),
+        : el('div', {}, el('p', { class: 'mute' }, can('demo') ? 'No competitors yet. Add a real competitor site to start tracking, or load three demo competitors you can edit live.' : 'No competitors yet. Add a competitor site to start tracking.'),
+          el('div', { class: 'row wrapx', style: 'margin-top:10px' }, el('button', { class: 'btn primary', onclick: () => { go('competitors'); setTimeout(() => $('cn')?.focus(), 50); } }, 'Add a competitor'), can('demo') && el('button', { class: 'btn', onclick: resetDemo }, 'Load demo competitors')))),
     el('div', { class: 'grid g2' }, digestCard(), changesCard(6, true)),
   ];
 }
@@ -505,12 +505,16 @@ function exportCsv(r) {
   const a = el('a', { href: URL.createObjectURL(new Blob([rows.map((x) => x.map(safe).join(',')).join('\n')], { type: 'text/csv' })), download: `rivalwatch-${r.period}ly-${r.to}.csv` });
   document.body.append(a); a.click(); a.remove(); toast('CSV downloaded');
 }
-const go = (t) => { tab = t; location.hash = t; document.body.classList.remove('open'); paintShell(); paintView(); window.scrollTo(0, 0); };
+const go = (t) => { if (t === 'demo' && !can('demo')) t = 'overview'; tab = t; location.hash = t; document.body.classList.remove('open'); paintShell(); paintView(); window.scrollTo(0, 0); };
 
 // ---------- shell ----------
-function buildNav() {
+function renderNav() { // the Live demo tab only exists when demo competitors are enabled (real accounts see real data only)
   $('nav').replaceChildren(...NAV.map(([group, items]) => el('div', { class: 'navgroup' }, el('h3', {}, group),
-    items.map(([k, label]) => el('button', { class: 'nav', 'data-k': k, onclick: () => go(k) }, icon(k), label, k === 'changes' && el('span', { class: 'cnt pill', id: 'cnt' }))))));
+    items.filter(([k]) => k !== 'demo' || can('demo')).map(([k, label]) => el('button', { class: 'nav', 'data-k': k, onclick: () => go(k) }, icon(k), label, k === 'changes' && el('span', { class: 'cnt pill', id: 'cnt' }))))));
+  document.querySelectorAll('.nav').forEach((b) => b.toggleAttribute('aria-current', false) || (b.dataset.k === tab && b.setAttribute('aria-current', 'page')));
+}
+function buildNav() {
+  renderNav();
   $('sCrawl').append(icon('crawl', 16), el('span', { id: 'sCrawlT' }, 'Crawl now')); $('sCrawl').onclick = crawlNow;
   $('sAdd').append(icon('plus', 16), 'Add competitor'); $('sAdd').onclick = () => { go('competitors'); setTimeout(() => $('cn')?.focus(), 50); };
   $('sReport').append(icon('reports', 16), 'Weekly report'); $('sReport').onclick = () => { period = 'week'; go('reports'); };
@@ -552,7 +556,7 @@ setInterval(tickTimer, 1000);
 setInterval(() => { if (!document.hidden) refresh().catch(() => {}); }, 5000);
 window.addEventListener('hashchange', () => { const t = location.hash.slice(1); if (TITLES[t] && t !== tab) go(t); });
 buildNav(); paintShell();
-api('/api/plans', { noRedirect: true }).then((d) => { d.plans.forEach((p) => PLANS[p.id] = p); CAPS = d.backend || {}; return refresh(true); });
+api('/api/plans', { noRedirect: true }).then((d) => { d.plans.forEach((p) => PLANS[p.id] = p); CAPS = d.backend || {}; if (tab === 'demo' && !can('demo')) tab = 'overview'; renderNav(); return refresh(true); });
 </script>
 </body>
 </html>
