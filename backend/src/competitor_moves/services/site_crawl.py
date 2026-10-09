@@ -16,13 +16,11 @@ from datetime import UTC, datetime, timedelta
 from functools import wraps
 from urllib.parse import urljoin, urlsplit
 
-from playwright.sync_api import Error as PlaywrightError
 from scrapling.parser import Selector
 
 from ..config import get_settings
 from ..core.ssrf import BlockedURL
 from ..crawler import extract, platforms, sitemap
-from ..crawler.browser import BrowserUnavailable, Renderer
 from ..crawler.fetch import ACCEPT_HTML, FetchError, Page
 from ..crawler.fetch import fetch as http_fetch
 from ..crawler.robots import Robots
@@ -231,6 +229,14 @@ class RunContext:
         if self.cfg.get("browser") != "auto" or self.browser_unavailable:
             return None
         if self.browser_pages_used >= self.cfg.get("browser_pages", 0):
+            return None
+        try:  # the browser stack is only installed in the worker image
+            from playwright.sync_api import Error as PlaywrightError
+
+            from ..crawler.browser import BrowserUnavailable, Renderer
+        except ImportError:
+            self.browser_unavailable = "playwright is not installed in this image"
+            self.trace.append({"node": "browser", "error": "no browser available: playwright is not installed"})
             return None
         self._take_page(url, check_robots=True)
         s = get_settings()

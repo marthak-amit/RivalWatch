@@ -37,8 +37,9 @@ def client():
         c.execute("delete from jobs where user_id in (select id from users where email like '%@test.local')")
         c.execute("delete from audit_log where actor_email like '%@test.local'")
         c.execute("delete from users where email like '%@test.local'")
-    from competitor_moves.api.routers.ui import limiter
-    limiter.hits.clear()
+    from competitor_moves.core import ratelimit
+    ratelimit.logins.hits.clear()
+    ratelimit.signups.hits.clear()
     close_pool()
 
 
@@ -60,11 +61,13 @@ def site(monkeypatch):
 
     routes: dict[str, tuple[int, dict, bytes | str]] = {}
     hits: list[str] = []
+    dynamic: list = []  # optional callables path -> (status, headers, body) | None, tried when no route matches
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             hits.append(self.path)
-            status, headers, body = routes.get(self.path, (404, {"content-type": "text/plain"}, "not found"))
+            found = routes.get(self.path) or next((r for f in dynamic if (r := f(self.path, self.headers))), None)
+            status, headers, body = found or (404, {"content-type": "text/plain"}, "not found")
             body = body.encode() if isinstance(body, str) else body
             self.send_response(status)
             for k, v in {"content-type": "text/html; charset=utf-8", **headers}.items():
@@ -81,7 +84,7 @@ def site(monkeypatch):
     host = f"127.0.0.1:{srv.server_port}"
     monkeypatch.setattr(ssrf, "ALLOW_LOCAL", {host})
     web_crawl._robots_cache.clear()
-    yield SimpleNamespace(base=f"http://{host}", routes=routes, hits=hits)
+    yield SimpleNamespace(base=f"http://{host}", routes=routes, hits=hits, dynamic=dynamic)
     srv.shutdown()
 
 

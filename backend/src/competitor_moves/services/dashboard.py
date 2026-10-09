@@ -13,7 +13,7 @@ from psycopg import sql
 from ..config import DEFAULT_CRON, get_settings
 from ..core.plans import PLANS
 from ..db.site_schema import table
-from . import workspaces
+from . import store_sync, workspaces
 
 SYMBOL = {"USD": "$", "GBP": "£", "EUR": "€", "INR": "₹", "AUD": "A$", "CAD": "C$", "JPY": "¥"}
 MAX_CHANGES = 1000
@@ -283,7 +283,8 @@ def state(conn, user: dict) -> dict:
     project = workspaces.get_or_create(conn, user)
     sites = workspaces.competitors(conn, project["id"])
     chs = changes(conn, sites)
-    digest_list = digests(chs)
+    from . import digests as stored  # stored digests import this module, so import here
+    digest_list = stored.ui_list(conn, project["id"]) or digests(chs)
     ids = [str(s["id"]) for s in sites]
     running = bool(ids) and conn.execute(
         "select 1 from jobs where type='crawl_site' and status in ('queued','running') and payload->>'site_id' = any(%s) limit 1",
@@ -301,4 +302,5 @@ def state(conn, user: dict) -> dict:
             "runs": sum(r["n"] for r in run_counts), "lastRun": _iso(last), "running": running,
             "credits": credits["credits"], "plan": PLANS[credits["plan"]],
             "nextRun": int(next_run.timestamp() * 1000), "intervalSec": interval,
-            "mode": "gemini" if get_settings().gemini_api_key else "rules", "testSites": []}
+            "mode": "gemini" if get_settings().gemini_api_key else "rules", "testSites": [],
+            "store": store_sync.store_view(conn, user)}

@@ -1,6 +1,6 @@
 # RivalWatch backend
 
-Python 3.12 · FastAPI · Postgres 16 · Scrapling (fetching + parsing) · headless Chromium (pages built by JavaScript) ·
+Python 3.12 · FastAPI · Postgres 16 · Scrapling (fetching + parsing) · headless Chromium in the worker image (pages built by JavaScript) ·
 LangGraph + Gemini (crawl agent).
 
 ## Run everything in Docker
@@ -41,18 +41,25 @@ docker --context default compose exec db psql -U postgres -d competitor -c \
 
 ### Run the crawler by hand inside Docker
 ```bash
-docker --context default compose exec api python scripts/try_crawl.py https://www.missoma.com/ --max-products 20 --twice
-docker --context default compose exec api python scripts/try_crawl.py https://www.indriya.com/ --max-products 8 --pages 60
-docker --context default compose exec api python scripts/try_crawl.py https://www.missoma.com/ --no-ai --keep
-docker --context default compose exec api python scripts/try_crawl.py --page https://www.missoma.com/products/<handle>
+docker --context default compose exec worker python scripts/try_crawl.py https://www.missoma.com/ --max-products 20 --twice
+docker --context default compose exec worker python scripts/try_crawl.py https://www.indriya.com/ --max-products 8 --pages 60
+docker --context default compose exec worker python scripts/try_crawl.py https://www.missoma.com/ --no-ai --keep
+docker --context default compose exec worker python scripts/try_crawl.py --page https://www.missoma.com/products/<handle>
 ```
-`--keep` leaves the data in schema `site_<id>` for DBeaver; the script prints the clean-up command.
+Run it in the **worker** container: it's the image with Chromium (the `app` image used by api/scheduler/migrate has no
+browser, which keeps it small). `--keep` leaves the data in schema `site_<id>` for DBeaver.
 
 ### Create an admin (admins are only created in the database)
 ```bash
 docker --context default compose exec api python scripts/create_admin.py admin@example.com 'a-long-password' \
   | docker --context default compose exec -T db psql -U postgres -d competitor
 ```
+
+## Our own store (Magento)
+`PUT /api/store {url, storeCode?, token?}` connects a workspace's Magento store. Its catalog is read through Magento's
+GraphQL API (public data needs no token; a token, if given, is stored encrypted with `APP_ENCRYPTION_KEY`), synced on
+the store's own cron by the scheduler (`sync_store` jobs), and stored in its own `site_<id>` schema with the same change
+history as competitors. louped.btdemo.biz: 1,462 products in ~17 s.
 
 ## Crawl settings
 Server defaults come from `.env`; each competitor can override them (`PATCH /api/competitors/{id}` with

@@ -3,13 +3,15 @@ import logging
 import signal
 import time
 
+from ..agents.compare import graph as compare_graph
 from ..agents.crawl import graph as crawl_graph
 from ..db.pool import close_pool, get_pool
-from ..services import web_crawl
+from ..services import digests, store_sync, web_crawl
 from . import queue
 
 log = logging.getLogger("worker")
-HANDLERS = {"web_crawl": web_crawl.run_job, "crawl_site": crawl_graph.run_job}
+HANDLERS = {"web_crawl": web_crawl.run_job, "crawl_site": crawl_graph.run_job, "sync_store": store_sync.run_job,
+            "compare_project": compare_graph.run_job}
 
 
 def run_once(conn) -> bool:
@@ -22,6 +24,8 @@ def run_once(conn) -> bool:
         if handler is None:
             raise queue.JobFailed(f"unknown job type {job['type']}")
         queue.complete(conn, job["id"], handler(conn, job))
+        if job["type"] in digests.CRAWL_JOBS:  # the last crawl/sync of a round queues the workspace's digest
+            digests.maybe_queue(conn, int(job["payload"]["site_id"]))
     except queue.JobFailed as e:
         queue.fail(conn, job, str(e), e.result, final=True)  # the handler decided: no retry
     except Exception as e:  # a bug or outage in one job must not kill the worker

@@ -9,7 +9,18 @@ from ...core.security import hash_password
 from ...db.pool import get_conn
 from ...db.repositories import sessions as session_repo
 from ...db.repositories import users
-from .ui import EMAIL, UiError, json_only, public_user, ui_admin
+from ...services import store_sync, workspaces
+from .ui import (
+    EMAIL,
+    StoreBody,
+    StorePatch,
+    UiError,
+    _check_clean,
+    json_only,
+    public_user,
+    store_patch,
+    ui_admin,
+)
 
 router = APIRouter(prefix="/api/admin", tags=["ui admin"], dependencies=[Depends(json_only), Depends(ui_admin)])
 ADMINS_IN_DB = "Admins are created and managed in the database, not through the API"
@@ -60,6 +71,7 @@ class NewUser(BaseModel):
 def create_user(body: NewUser, admin=Depends(ui_admin), conn=Depends(get_conn)):
     if body.role == "admin":
         raise UiError(403, ADMINS_IN_DB)
+    _check_clean(body.email, body.password, body.name)
     email = body.email.strip().lower()
     if not EMAIL.match(email):
         raise UiError(400, "Enter a valid email address")
@@ -133,6 +145,7 @@ def reset_password(user_id: int, body: PasswordBody, admin=Depends(ui_admin), co
     t = _target(conn, user_id)
     if t["role"] == "admin" and t["id"] != admin["id"]:
         raise UiError(403, ADMINS_IN_DB)
+    _check_clean(body.password)
     if len(body.password) < 8:
         raise UiError(400, "Password must be at least 8 characters")
     conn.execute("update users set password_hash=%s where id=%s", (hash_password(body.password), user_id))
@@ -145,3 +158,55 @@ def reset_password(user_id: int, body: PasswordBody, admin=Depends(ui_admin), co
 def audit(conn=Depends(get_conn)):
     return {"audit": [{"ts": a["ts"].isoformat(), "actor": a["actor_email"], "action": a["action"],
                        "target": a["target_email"] or "", "detail": a["detail"]} for a in users.audit_log(conn)]}
+
+
+# ---- a client's store, managed by the admin (the agency sets it up for them) --------------------------------------
+
+def _store_owner(conn, user_id: int) -> dict:
+    t = _target(conn, user_id)
+    if t["role"] == "admin":
+        raise UiError(400, "Admins don't have a workspace store")
+    return t
+
+
+@router.get("/users/{user_id}/store")
+def admin_get_store(user_id: int, conn=Depends(get_conn)):
+    return {"store": store_sync.store_view(conn, _store_owner(conn, user_id))}
+
+
+@router.put("/users/{user_id}/store")
+def admin_put_store(user_id: int, body: StoreBody, admin=Depends(ui_admin), conn=Depends(get_conn)):
+    t = _store_owner(conn, user_id)
+    try:
+        store_sync.connect(conn, t, body.url, store_code=body.storeCode, token=body.token, cron=body.cron)
+    except workspaces.WorkspaceError as e:
+        raise UiError(e.status, str(e)) from None
+    users.audit(conn, admin, "store_connect", t, body.url)
+    return {"store": store_sync.store_view(conn, t)}
+
+
+@router.patch("/users/{user_id}/store")
+def admin_patch_store(user_id: int, body: StorePatch, admin=Depends(ui_admin), conn=Depends(get_conn)):
+    t = _store_owner(conn, user_id)
+    store_patch(conn, t, body)
+    users.audit(conn, admin, "store_update", t, ", ".join(sorted(body.model_fields_set - {"token"}) +
+                                                          (["token"] if "token" in body.model_fields_set else [])))
+    return {"store": store_sync.store_view(conn, t)}
+
+
+@router.post("/users/{user_id}/store/sync")
+def admin_sync_store(user_id: int, admin=Depends(ui_admin), conn=Depends(get_conn)):
+    t = _store_owner(conn, user_id)
+    view = store_sync.store_view(conn, t)
+    if not view:
+        raise UiError(404, "No store connected")
+    users.audit(conn, admin, "store_sync", t)
+    return {"queued": store_sync.queue_sync(conn, int(view["id"])), "store": store_sync.store_view(conn, t)}
+
+
+@router.delete("/users/{user_id}/store")
+def admin_delete_store(user_id: int, admin=Depends(ui_admin), conn=Depends(get_conn)):
+    t = _store_owner(conn, user_id)
+    store_sync.disconnect(conn, t)
+    users.audit(conn, admin, "store_disconnect", t)
+    return {"ok": True}

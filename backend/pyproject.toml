@@ -13,13 +13,15 @@ dependencies = [
   "cryptography==50.0.2",
   "croniter==6.2.4",
   "httpx",
-  "scrapling[fetchers]==0.4.15",
+  "scrapling==0.4.15",          # HTML parsing (Selector)
+  "curl_cffi==0.16.3",          # HTTP with a browser TLS fingerprint
   "langgraph==1.2.14",
   "langchain-core==1.6.9",
   "langchain-google-genai==4.4.0",
 ]
 
 [project.optional-dependencies]
+browser = ["playwright==1.63.0"]  # rendering JavaScript-built pages: worker image only
 dev = ["pytest", "ruff==0.16.10"]
 
 [build-system]
