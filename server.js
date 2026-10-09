@@ -8,6 +8,7 @@ import { Workspaces } from './lib/workspace.js';
 import * as testsite from './lib/testsite.js';
 import { buildReport } from './lib/reports.js';
 import { makeDigest } from './lib/digest.js';
+import { Backend, BackendError, BackendIdentity, RemoteCrawler, RoutingCrawler, toAdminRow } from './lib/backend.js';
 
 const PORT = +process.env.PORT || 3000;
 const HOST = process.env.HOST || '127.0.0.1';
@@ -16,15 +17,22 @@ const ADMIN_PW = process.env.ADMIN_PASSWORD || 'admin1234';
 const DEMO_PW = 'demo1234';
 const PUBLIC = path.resolve('public');
 
+// BACKEND_URL switches on the Python backend integration (see docs/integration/). Unset = standalone demo.
+const BACKEND = process.env.BACKEND_URL ? new Backend(process.env.BACKEND_URL) : null;
+const identity = BACKEND ? new BackendIdentity(BACKEND) : null;
+// Demo competitors (editable test sites) are on by default standalone, off for real backend accounts.
+const DEMO_COMPETITORS = process.env.DEMO_COMPETITORS ? process.env.DEMO_COMPETITORS !== '0' : !BACKEND;
 const users = new UserStore(path.resolve(process.env.DATA_DIR || 'data', 'users.json'));
 const sessions = new Sessions();
-const workspaces = new Workspaces(PORT);
+const workspaces = new Workspaces(PORT, { demo: DEMO_COMPETITORS, makeCrawler: BACKEND
+  ? (local, ws) => { local.credits = Infinity; return new RoutingCrawler(local, new RemoteCrawler(BACKEND, () => ws.user.apiKey)); } // demo pages local, real sites via the backend
+  : undefined });
 const authLimiter = new Limiter();
 const audit = [];
 const log = (actor, action, target, detail = '') => { audit.unshift({ ts: new Date().toISOString(), actor: actor.email, action, target: target?.email ?? '', detail }); audit.length = Math.min(audit.length, 100); };
 
 // ---- seed data (first run only) ------------------------------------------------
-if (!users.list().length) {
+if (!BACKEND && !users.list().length) {
   const ago = (d) => new Date(Date.now() - d * 864e5).toISOString();
   users.create({ email: 'admin@rivalwatch.dev', name: 'Ada Admin', password: ADMIN_PW, plan: 'business', role: 'admin', createdAt: ago(60), lastLoginAt: ago(0) });
   users.create({ email: 'demo@rivalwatch.dev', name: 'Dana Demo', password: DEMO_PW, plan: 'pro', createdAt: ago(21), lastLoginAt: ago(1) });
@@ -40,7 +48,7 @@ const api = makeApi((key) => { const u = users.byApiKey(key); return u && u.stat
 let nextRun = Date.now() + INTERVAL;
 setInterval(() => {
   nextRun = Date.now() + INTERVAL;
-  for (const ws of workspaces.all()) if (users.byId(ws.userId)?.status === 'active') ws.monitor.run().catch((e) => console.error('crawl failed', e));
+  for (const ws of workspaces.all()) if (BACKEND || users.byId(ws.userId)?.status === 'active') ws.monitor.run().catch((e) => console.error('crawl failed', e));
 }, INTERVAL);
 
 // ---- http helpers ---------------------------------------------------------------
@@ -60,7 +68,8 @@ const readJson = (req) => new Promise((resolve) => {
 const cookie = (req, name) => (req.headers.cookie || '').split(/;\s*/).map((c) => c.split('=')).find(([k]) => k === name)?.[1];
 const setSession = (req, token, maxAge = 86400) =>
   ({ 'set-cookie': `rw_session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}${req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : ''}` });
-const currentUser = (req) => {
+const currentUser = async (req) => {
+  if (BACKEND) return identity.resolve(cookie(req, 'rw_session')); // GET /user/me on the backend (briefly cached)
   const id = sessions.get(cookie(req, 'rw_session'));
   const u = id && users.byId(id);
   return u && u.status === 'active' ? u : null;
@@ -70,7 +79,7 @@ const fail = (res, status, error) => send(res, status, { error });
 const PAGES = { '/': 'index.html', '/login': 'login.html', '/app': 'app.html', '/admin': 'admin.html', '/style.css': 'style.css', '/common.js': 'common.js' };
 const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript' };
 
-const meView = (u) => ({ ...publicUser(u), apiKey: u.apiKey, plan: u.plan, planInfo: PLANS[u.plan] });
+const meView = (u) => ({ ...publicUser(u), apiKey: u.apiKey, plan: u.plan, planInfo: PLANS[u.plan], ...(BACKEND ? { credits: u.credits } : {}) });
 
 // ---- routes ---------------------------------------------------------------------
 http.createServer(async (req, res) => {
@@ -80,7 +89,7 @@ http.createServer(async (req, res) => {
   try {
     // pages
     if (M === 'GET' && PAGES[p]) {
-      const user = currentUser(req);
+      const user = await currentUser(req);
       if (p === '/app' && !user) return redirect(res, '/login');
       if (p === '/admin' && user?.role !== 'admin') return redirect(res, user ? '/app' : '/login');
       const f = PAGES[p];
@@ -90,6 +99,15 @@ http.createServer(async (req, res) => {
     if (p === '/favicon.ico') { res.writeHead(204, HEADERS); return res.end(); }
 
     // crawl API
+    if (BACKEND && p.startsWith('/v1/')) { // the backend owns the public crawl API (keys, credits, robots.txt, SSRF checks)
+      const body = M === 'GET' || M === 'HEAD' ? undefined : await new Promise((ok, no) => { // capped at 1 MB so the proxy can't be used to exhaust memory
+        const c = []; let n = 0;
+        req.on('data', (d) => { n += d.length; if (n > 1e6) { req.destroy(); no(new BackendError(413, 'Request body too large')); } else c.push(d); });
+        req.on('end', () => ok(Buffer.concat(c))); req.on('error', no); });
+      const r = await BACKEND.raw(M, p + url.search, { apiKey: req.headers['x-api-key'], body: body?.length ? body : undefined, headers: req.headers['content-type'] ? { 'content-type': req.headers['content-type'] } : {} });
+      res.writeHead(r.status, { ...HEADERS, 'content-type': r.type || 'application/json', 'cache-control': 'no-store' });
+      return res.end(r.buf);
+    }
     if (p.startsWith('/v1/')) {
       const out = await api(M, url, req.headers, M === 'POST' ? await readJson(req) : null);
       return send(res, out.status, out.body);
@@ -109,8 +127,12 @@ http.createServer(async (req, res) => {
     if (M !== 'GET' && !/^application\/json/.test(req.headers['content-type'] || '')) return fail(res, 415, 'JSON body required');
 
     // public
-    if (p === '/api/session' && M === 'GET') { const u = currentUser(req); return send(res, 200, { user: u ? meView(u) : null }); }
+    if (p === '/api/session' && M === 'GET') { const u = await currentUser(req); return send(res, 200, { user: u ? meView(u) : null }); }
     if (p === '/api/plans' && M === 'GET') {
+      const pair = (v) => { const [email, ...pw] = String(v || '').split(':'); return email && pw.length ? { email, password: pw.join(':') } : null; };
+      if (BACKEND) return send(res, 200, { plans: Object.values(PLANS), annualDiscount: ANNUAL_DISCOUNT, demo: { user: pair(process.env.DEMO_USER), admin: pair(process.env.DEMO_ADMIN) },
+        // what the backend can't do yet; the UI hides or disables these instead of failing
+        backend: { enabled: true, signupName: false, planChanges: false, rotateKey: false, adminPlanEdit: false, adminRoleEdit: false, adminResetCredits: false, adminResetPassword: false } });
       return send(res, 200, { plans: Object.values(PLANS), annualDiscount: ANNUAL_DISCOUNT,
         demo: { user: users.byEmail('demo@rivalwatch.dev') ? { email: 'demo@rivalwatch.dev', password: DEMO_PW } : null,
           admin: !process.env.ADMIN_PASSWORD ? { email: 'admin@rivalwatch.dev', password: ADMIN_PW } : null } });
@@ -118,6 +140,13 @@ http.createServer(async (req, res) => {
     if ((p === '/api/auth/login' || p === '/api/auth/signup') && M === 'POST') {
       const b = await readJson(req);
       if (!authLimiter.hit(req.socket.remoteAddress + '|' + normEmail(b.email))) return fail(res, 429, 'Too many attempts. Try again in a few minutes.');
+      if (BACKEND) { // one form, both roles; the backend token lives in the HttpOnly cookie
+        const email = String(b.email ?? '').trim(), pw = String(b.password ?? '');
+        const s = p.endsWith('login') ? await BACKEND.login(email, pw) : await BACKEND.signup(email, pw);
+        if (p.endsWith('signup')) log({ email }, 'signup', { email });
+        const maxAge = Math.max(60, Math.min(7 * 86400, Math.floor((Date.parse(s.expires_at) - Date.now()) / 1000) || 86400));
+        return send(res, 200, { redirect: s.role === 'admin' ? '/admin' : '/app', user: { email: s.email, role: s.role } }, 'application/json', setSession(req, s.token, maxAge));
+      }
       let u;
       if (p.endsWith('login')) {
         u = users.authenticate(b.email, b.password);
@@ -132,15 +161,22 @@ http.createServer(async (req, res) => {
       return send(res, 200, { redirect: u.role === 'admin' ? '/admin' : '/app', user: publicUser(u) }, 'application/json', setSession(req, sessions.create(u.id)));
     }
     if (p === '/api/auth/logout' && M === 'POST') {
+      if (BACKEND) { // revoke the session on the backend too, so the token is dead even if it leaked
+        const token = cookie(req, 'rw_session'), u = await identity.resolve(token).catch(() => null);
+        if (u) await BACKEND.logout(token, u.role).catch(() => {});
+        identity.invalidate(token);
+        return send(res, 200, { ok: true }, 'application/json', setSession(req, '', 0));
+      }
       sessions.destroy(cookie(req, 'rw_session'));
       return send(res, 200, { ok: true }, 'application/json', setSession(req, '', 0));
     }
 
     // everything below needs a session
-    const user = currentUser(req);
+    const user = await currentUser(req);
     if (!user) return fail(res, 401, 'Not signed in');
 
     if (p === '/api/me' && M === 'GET') return send(res, 200, meView(user));
+    if (BACKEND && (p === '/api/me/plan' || p === '/api/me/rotate-key') && M === 'POST') return fail(res, 501, 'Not available yet: the backend has no endpoint for this.');
     if (p === '/api/me/plan' && M === 'POST') {
       const { plan } = await readJson(req);
       if (!isPlan(plan)) return fail(res, 400, 'Unknown plan');
@@ -154,14 +190,15 @@ http.createServer(async (req, res) => {
     // dashboard
     if (p.startsWith('/api/') && !p.startsWith('/api/admin')) {
       const ws = workspaces.get(user);
+      ws.user = user; // the remote crawler reads the current API key from here
       const plan = PLANS[user.plan];
       if (p === '/api/state' && M === 'GET') {
         const view = ws.monitor.view();
-        return send(res, 200, { ...view, credits: ws.crawler.credits, plan, nextRun, intervalSec: INTERVAL / 1000,
+        return send(res, 200, { ...view, credits: BACKEND ? user.credits : ws.crawler.credits, plan, nextRun, intervalSec: INTERVAL / 1000,
           mode: process.env.ANTHROPIC_API_KEY ? 'claude' : 'rules',
           testSites: view.competitors.filter((c) => c.site).map((c) => ({ id: c.site, name: c.name, url: `/test/${user.id}/${c.site}/` })) });
       }
-      if (p === '/api/crawl' && M === 'POST') { const r = await ws.monitor.run(); return send(res, 200, { skipped: r.skipped, changes: r.changes.length }); }
+      if (p === '/api/crawl' && M === 'POST') { const r = await ws.monitor.run(); if (BACKEND) identity.invalidate(user.token); /* credits changed */ return send(res, 200, { skipped: r.skipped, changes: r.changes.length }); }
       if (p === '/api/competitors' && M === 'POST') {
         const b = await readJson(req);
         let u; try { u = new URL(String(b.url || '')); if (!/^https?:$/.test(u.protocol)) throw 0; } catch { return fail(res, 400, 'Enter a valid http(s) URL'); }
@@ -169,7 +206,7 @@ http.createServer(async (req, res) => {
         if (ws.monitor.competitors.some((c) => c.url === u.href)) return fail(res, 400, 'Already monitoring this URL');
         const c = { id: 'u' + Math.random().toString(36).slice(2, 8), name: String(b.name || '').trim().slice(0, 40) || u.hostname, url: u.href };
         ws.monitor.add(c);
-        ws.monitor.run([c.id]).catch(() => {}); // baseline for the new competitor only
+        ws.monitor.run([c.id]).then(() => BACKEND && identity.invalidate(user.token)).catch(() => {}); // baseline for the new competitor only
         return send(res, 200, { ok: true });
       }
       const dc = p.match(/^\/api\/competitors\/(\w+)$/);
@@ -197,8 +234,15 @@ http.createServer(async (req, res) => {
         return send(res, 200, { edited: testsite.edit(ws.sites, site, action) });
       }
       if (p === '/api/test/reset' && M === 'POST') {
-        testsite.reset(ws.sites); ws.monitor.reset(); ws.monitor.seedHistory(); ws.crawler.credits = plan.credits;
-        await ws.monitor.run();
+        testsite.reset(ws.sites);
+        const missing = workspaces.demoCompetitors(user, ws.sites).filter((c) => !ws.monitor.competitors.some((x) => x.id === c.id));
+        let added = 0;
+        for (const c of missing) { if (ws.monitor.competitors.length >= plan.competitors) break; ws.monitor.add(c); added++; }
+        if (missing.length && !added) return fail(res, 403, `Your ${plan.name} plan allows ${plan.competitors} competitors. Remove one to load the demo competitors.`);
+        const real = ws.monitor.competitors.filter((c) => !c.site).map((c) => c.id); // real competitors keep their history
+        ws.monitor.reset(real); ws.monitor.seedHistory();
+        if (!BACKEND) ws.crawler.credits = plan.credits;
+        await ws.monitor.run(ws.monitor.competitors.filter((c) => c.site).map((c) => c.id)); // re-baseline the demo sites only
         return send(res, 200, { ok: true });
       }
       return fail(res, 404, 'not found');
@@ -206,6 +250,58 @@ http.createServer(async (req, res) => {
 
     // admin
     if (user.role !== 'admin') return fail(res, 403, 'Admin only');
+    if (BACKEND) { // user management goes to the backend's /admin/users; what it can't do yet answers 501
+      const tok = user.token;
+      const NOPE = 'Not supported by the backend yet.';
+      const rows = async () => (await BACKEND.listUsers(tok)).map((u) => toAdminRow(u, workspaces.peek(String(u.id))?.monitor.competitors.length ?? null));
+      const find = async (id) => (await rows()).find((r) => r.id === String(id));
+      if (p === '/api/admin/stats' && M === 'GET') {
+        const all = await BACKEND.listUsers(tok);
+        return send(res, 200, { total: all.length, active: all.filter((u) => u.is_active).length, suspended: all.filter((u) => !u.is_active).length,
+          admins: all.filter((u) => u.role === 'admin').length, activeNow: all.filter((u) => u.active_now).length, byPlan: null, mrr: null,
+          newThisWeek: all.filter((u) => Date.now() - Date.parse(u.created_at) < 7 * 864e5).length });
+      }
+      if (p === '/api/admin/users' && M === 'GET') {
+        const q = (url.searchParams.get('q') || '').toLowerCase(), st = url.searchParams.get('status');
+        const out = (await rows()).filter((r) => (!q || r.email.toLowerCase().includes(q) || r.name.toLowerCase().includes(q)) && (!st || r.status === st))
+          .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+        return send(res, 200, { users: out });
+      }
+      if (p === '/api/admin/users' && M === 'POST') {
+        const b = await readJson(req);
+        if (b.role === 'admin') return fail(res, 403, 'Admins can only be created directly in the database.');
+        const s = await BACKEND.signup(String(b.email ?? '').trim(), String(b.password ?? ''));
+        await BACKEND.logout(s.token, 'user').catch(() => {}); // signup opens a session for the new user; close it
+        log(user, 'create_user', { email: s.email }, 'user');
+        return send(res, 200, await find(s.id));
+      }
+      const bu = p.match(/^\/api\/admin\/users\/(\w+)(?:\/(reset-credits|reset-password))?$/);
+      if (bu) {
+        const [, id, action] = bu;
+        if (action) return fail(res, 501, NOPE);
+        const target = await find(id);
+        if (!target) return fail(res, 404, 'User not found');
+        if (M === 'PATCH') {
+          const b = await readJson(req);
+          if (b.plan !== undefined || b.role !== undefined) return fail(res, 501, NOPE);
+          if (!['active', 'suspended'].includes(b.status)) return fail(res, 400, 'Bad status');
+          if (id === user.id) return fail(res, 400, "You can't suspend yourself");
+          await BACKEND.setActive(tok, id, b.status === 'active'); // also ends that user's sessions on the backend
+          identity.invalidateUser(id);
+          log(user, 'update_user', target, JSON.stringify({ status: b.status }));
+          return send(res, 200, await find(id));
+        }
+        if (M === 'DELETE') {
+          if (id === user.id) return fail(res, 400, "You can't delete your own account");
+          await BACKEND.deleteUser(tok, id);
+          workspaces.drop(id); identity.invalidateUser(id);
+          log(user, 'delete_user', target);
+          return send(res, 200, { ok: true });
+        }
+      }
+      if (p === '/api/admin/audit' && M === 'GET') return send(res, 200, { audit });
+      return fail(res, 404, 'not found');
+    }
     const row = (u) => ({ ...publicUser(u), credits: workspaces.peek(u.id)?.crawler.credits ?? PLANS[u.plan].credits,
       creditLimit: PLANS[u.plan].credits, competitors: workspaces.peek(u.id)?.monitor.competitors.length ?? 3 });
     const activeAdmins = () => users.list().filter((u) => u.role === 'admin' && u.status === 'active');
@@ -271,10 +367,12 @@ http.createServer(async (req, res) => {
     if (p === '/api/admin/audit' && M === 'GET') return send(res, 200, { audit });
     fail(res, 404, 'not found');
   } catch (e) {
+    if (e instanceof BackendError) return fail(res, e.status, e.message); // backend said no (or is down)
     console.error(e);
     fail(res, 400, e.message);
   }
 }).listen(PORT, HOST, () => {
   console.log(`RivalWatch on http://${HOST === '127.0.0.1' ? 'localhost' : HOST}:${PORT}  (digest: ${process.env.ANTHROPIC_API_KEY ? 'Claude' : 'rule-based'}, crawl every ${INTERVAL / 1000}s)`);
-  console.log(`Demo logins: demo@rivalwatch.dev / ${DEMO_PW}   admin@rivalwatch.dev / ${process.env.ADMIN_PASSWORD ? '(ADMIN_PASSWORD)' : ADMIN_PW}`);
+  if (BACKEND) console.log(`Backend: ${process.env.BACKEND_URL}  (accounts, sessions, admin users and the /v1 crawl API; demo competitors ${DEMO_COMPETITORS ? 'on' : 'off'})`);
+  else console.log(`Demo logins: demo@rivalwatch.dev / ${DEMO_PW}   admin@rivalwatch.dev / ${process.env.ADMIN_PASSWORD ? '(ADMIN_PASSWORD)' : ADMIN_PW}`);
 });

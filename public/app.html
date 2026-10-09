@@ -156,6 +156,8 @@ const btnI = (n, label, props = {}) => el('button', { class: 'btn', ...props }, 
 const NAV = [['Monitor', [['overview', 'Overview'], ['competitors', 'Competitors'], ['changes', 'Changes']]], ['Insights', [['reports', 'Reports'], ['digests', 'AI digests']]], ['Tools', [['demo', 'Live demo'], ['account', 'Account & API']]]];
 const TITLES = { overview: 'Overview', competitors: 'Competitors', changes: 'Changes', reports: 'Reports', digests: 'AI digests', demo: 'Live demo', account: 'Account & API' };
 let S = null, ME = null, R = { week: null, month: null }, PLANS = {}, sig = '';
+let CAPS = {}; // what the backend supports (everything, in standalone mode)
+const can = (k) => CAPS[k] !== false;
 let tab = (location.hash || '#overview').slice(1); if (!TITLES[tab]) tab = 'overview';
 let selComp = ''; try { selComp = sessionStorage.getItem('rw_comp') || ''; } catch { /* storage may be blocked */ }
 let period = 'week', showTable = false, summary = null, summarizing = false, flt = { type: '', comp: '' }, selSite = '', editMsg = 'Pick an edit, then crawl.';
@@ -293,7 +295,8 @@ function overviewAll(w) {
     el('div', { style: 'margin-bottom:14px' }, activityCard(w, { weekly: true, linkToReports: true })),
     el('div', { class: 'card', style: 'margin-bottom:14px' }, el('div', { class: 'h-sec' }, 'Competitor comparison · click a row for details'),
       S.competitors.length ? el('div', { class: 'scroll' }, el('table', { class: 't' }, el('thead', {}, el('tr', {}, ['Competitor', 'Products', 'Price range', 'Promos', 'Pages', 'Changes (7d)', 'Last change', ''].map((h, i) => el('th', { class: i > 0 && i < 7 ? 'n' : '' }, h)))), el('tbody', {}, rows)))
-        : el('p', { class: 'mute' }, 'No competitors yet. Add one from the sidebar.')),
+        : el('div', {}, el('p', { class: 'mute' }, 'No competitors yet. Add a real competitor site to start tracking, or load three demo competitors you can edit live.'),
+          el('div', { class: 'row wrapx', style: 'margin-top:10px' }, el('button', { class: 'btn primary', onclick: () => { go('competitors'); setTimeout(() => $('cn')?.focus(), 50); } }, 'Add a competitor'), el('button', { class: 'btn', onclick: resetDemo }, 'Load demo competitors')))),
     el('div', { class: 'grid g2' }, digestCard(), changesCard(6, true)),
   ];
 }
@@ -464,7 +467,7 @@ function demo() {
       el('p', { class: 'small mute', id: 'editmsg', style: 'margin-top:10px' }, editMsg),
       el('div', { class: 'row wrapx small', style: 'margin-top:6px' }, el('span', { class: 'mute' }, 'View the page:'), S.testSites.map((t) => el('a', { href: t.url + 'pricing', target: '_blank', rel: 'noopener' }, t.name))),
       el('div', { style: 'margin-top:12px' }, btnI('crawl', 'Crawl now', { class: 'btn primary', onclick: crawlNow })))
-      : el('div', { class: 'card mute', style: 'margin-bottom:14px' }, 'You removed the demo competitors. Press Reset to bring them back.', el('div', { style: 'margin-top:8px' }, el('button', { class: 'btn sm', onclick: resetDemo }, 'Reset'))),
+      : el('div', { class: 'card mute', style: 'margin-bottom:14px' }, 'The demo competitors aren\'t loaded. Load three editable test competitors to try change detection without a real site.', el('div', { style: 'margin-top:8px' }, el('button', { class: 'btn sm primary', onclick: resetDemo }, 'Load demo competitors'))),
     el('div', { class: 'grid g2' }, digestCard(), changesCard(6)),
   ];
 }
@@ -472,15 +475,16 @@ function demo() {
 function account() {
   const base = location.origin, key = ME.apiKey;
   return [
-    el('div', { class: 'card', style: 'margin-bottom:14px' }, el('div', { class: 'h-sec' }, 'Profile'), el('div', {}, el('b', {}, ME.name), ' · ', ME.email), el('div', { class: 'small mute' }, 'Member since ' + new Date(ME.createdAt).toLocaleDateString())),
-    el('div', { class: 'h-sec' }, 'Plan (demo checkout, no payment taken)'),
+    el('div', { class: 'card', style: 'margin-bottom:14px' }, el('div', { class: 'h-sec' }, 'Profile'), el('div', {}, el('b', {}, ME.name), ' · ', ME.email), ME.createdAt && el('div', { class: 'small mute' }, 'Member since ' + new Date(ME.createdAt).toLocaleDateString())),
+    el('div', { class: 'h-sec' }, can('planChanges') ? 'Plan (demo checkout, no payment taken)' : 'Plan'),
+    !can('planChanges') && el('p', { class: 'small mute', style: 'margin:-4px 0 10px' }, 'Plan changes will be available once billing is connected.'),
     el('div', { class: 'grid g3', style: 'margin-bottom:14px' }, Object.values(PLANS).map((p) => el('div', { class: 'planopt' + (p.id === ME.plan ? ' cur' : '') },
       el('div', { class: 'row between' }, el('b', {}, p.name), p.id === ME.plan && el('span', { class: 'pill acc' }, 'Current')),
       el('div', {}, el('b', { style: 'font-size:22px' }, money(p.price)), el('span', { class: 'mute' }, '/mo')), el('div', { class: 'small mute' }, `${p.competitors} competitors · ${p.credits.toLocaleString()} credits`),
-      p.id !== ME.plan && el('button', { class: 'btn sm', style: 'margin-top:10px', onclick: () => changePlan(p) }, (p.price > PLANS[ME.plan].price ? 'Upgrade' : 'Downgrade') + ' to ' + p.name)))),
+      p.id !== ME.plan && el('button', { class: 'btn sm', style: 'margin-top:10px', disabled: !can('planChanges'), title: can('planChanges') ? '' : 'Plan changes will be available once billing is connected', onclick: () => changePlan(p) }, (p.price > PLANS[ME.plan].price ? 'Upgrade' : 'Downgrade') + ' to ' + p.name)))),
     el('div', { class: 'card' }, el('div', { class: 'h-sec' }, 'Crawl API'), el('p', { class: 'small mute' }, 'SocialCrawl-style endpoints. Each page fetched costs 1 credit.'),
       el('div', { class: 'row wrapx', style: 'margin-top:8px' }, el('code', { id: 'keytxt' }, key.slice(0, 7) + '…••••••••••••'),
-        el('button', { class: 'btn sm', onclick: () => { $('keytxt').textContent = key; } }, 'Reveal'), el('button', { class: 'btn sm', onclick: () => navigator.clipboard?.writeText(key).then(() => toast('Copied')) }, 'Copy'), el('button', { class: 'btn sm danger', onclick: rotate }, 'Rotate')),
+        el('button', { class: 'btn sm', onclick: () => { $('keytxt').textContent = key; } }, 'Reveal'), el('button', { class: 'btn sm', onclick: () => navigator.clipboard?.writeText(key).then(() => toast('Copied')) }, 'Copy'), can('rotateKey') && el('button', { class: 'btn sm danger', onclick: rotate }, 'Rotate')),
       el('pre', {}, `curl -H "x-api-key: ${key.slice(0, 7)}…" "${base}/v1/credits/balance"\ncurl -H "x-api-key: …" "${base}/v1/web/scrape?url=https://example.com"\ncurl -X POST -H "x-api-key: …" -H "content-type: application/json" \\\n  ${base}/v1/web/crawl -d '{"url":"https://example.com","max_depth":1,"limit":5}'`))];
 }
 const VIEWS = { overview, competitors, changes, reports, digests, demo, account };
@@ -548,7 +552,7 @@ setInterval(tickTimer, 1000);
 setInterval(() => { if (!document.hidden) refresh().catch(() => {}); }, 5000);
 window.addEventListener('hashchange', () => { const t = location.hash.slice(1); if (TITLES[t] && t !== tab) go(t); });
 buildNav(); paintShell();
-api('/api/plans', { noRedirect: true }).then((d) => { d.plans.forEach((p) => PLANS[p.id] = p); return refresh(true); });
+api('/api/plans', { noRedirect: true }).then((d) => { d.plans.forEach((p) => PLANS[p.id] = p); CAPS = d.backend || {}; return refresh(true); });
 </script>
 </body>
 </html>

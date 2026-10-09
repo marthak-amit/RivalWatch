@@ -54,14 +54,18 @@
 
 <script src="/common.js"></script>
 <script>
-let PLANS = {}, ME = null, users = [];
+let PLANS = {}, ME = null, users = [], CAPS = {}; // CAPS: what the backend supports (all true in standalone mode)
+const can = (k) => CAPS[k] !== false;
+const fmtDur = (sec) => sec >= 3600 ? Math.round(sec / 360) / 10 + ' h' : Math.max(1, Math.round(sec / 60)) + ' min';
 
 const initials = (n) => n.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
 const kpi = (v, l) => el('div', { class: 'card kpi' }, el('div', { class: 'v' }, String(v)), el('div', { class: 'l' }, l));
 
 async function loadStats() {
   const s = await api('/api/admin/stats');
-  $('kpis').replaceChildren(kpi(s.total, 'Total users'), kpi(s.active, 'Active'), kpi(s.suspended, 'Suspended'), kpi(money(s.mrr), 'Monthly recurring revenue'));
+  $('dist').parentElement.hidden = !s.byPlan; // plan mix and revenue need plan data the backend doesn't expose yet
+  $('kpis').replaceChildren(kpi(s.total, 'Total users'), kpi(s.active, 'Active'), kpi(s.suspended, 'Suspended'), s.byPlan ? kpi(money(s.mrr), 'Monthly recurring revenue') : kpi(s.activeNow ?? 0, 'Signed in now'));
+  if (!s.byPlan) return;
   const tot = Object.values(s.byPlan).reduce((a, b) => a + b, 0) || 1;
   $('dist').replaceChildren(...Object.entries(s.byPlan).map(([k, n]) => el('i', { class: 'c-' + k, style: `width:${n / tot * 100}%`, title: `${PLANS[k].name}: ${n}` })));
   $('legend').replaceChildren(...Object.entries(s.byPlan).map(([k, n]) => el('span', {}, el('b', { class: 'c-' + k }), `${PLANS[k].name}: ${n}`)));
@@ -76,21 +80,23 @@ async function loadUsers() {
 
 function rowFor(u) {
   const self = u.id === ME.id;
-  const planSel = el('select', { class: 'inline', 'aria-label': 'Plan for ' + u.email, onchange: (e) => patch(u, { plan: e.target.value }, `${u.name} moved to ${PLANS[e.target.value].name}`) },
+  const planSel = u.plan === null || !can('adminPlanEdit') ? el('span', { class: u.plan ? 'pill' : 'mute' }, u.plan ? PLANS[u.plan]?.name ?? u.plan : '—') : el('select', { class: 'inline', 'aria-label': 'Plan for ' + u.email, onchange: (e) => patch(u, { plan: e.target.value }, `${u.name} moved to ${PLANS[e.target.value].name}`) },
     Object.values(PLANS).map((p) => el('option', { value: p.id, selected: p.id === u.plan }, p.name)));
-  const pct = Math.max(0, Math.min(100, u.credits / u.creditLimit * 100));
+  const hasUsage = u.credits !== null && u.credits !== undefined;
+  const pct = hasUsage ? Math.max(0, Math.min(100, u.credits / u.creditLimit * 100)) : 0;
   return el('tr', {},
     el('td', {}, el('div', { class: 'row' }, el('div', { class: 'av' }, initials(u.name)), el('div', {}, el('b', {}, u.name + (self ? ' (you)' : '')), el('div', { class: 'small mute' }, u.email)))),
     el('td', {}, el('span', { class: 'pill' + (u.role === 'admin' ? ' acc' : '') }, u.role)),
     el('td', {}, planSel),
-    el('td', {}, el('span', { class: 'pill ' + (u.status === 'active' ? 'good' : 'bad') }, u.status)),
-    el('td', {}, el('div', { class: 'small', style: 'white-space:nowrap' }, `${u.competitors} sites · ${u.credits.toLocaleString()} credits`), el('div', { class: 'meter' }, el('i', { style: `width:${pct}%` }))),
+    el('td', {}, el('span', { class: 'pill ' + (u.status === 'active' ? 'good' : 'bad') }, u.status), u.activeNow && el('span', { class: 'pill good', style: 'margin-left:6px' }, '● online')),
+    hasUsage ? el('td', {}, el('div', { class: 'small', style: 'white-space:nowrap' }, `${u.competitors ?? 0} sites · ${u.credits.toLocaleString()} credits`), el('div', { class: 'meter' }, el('i', { style: `width:${pct}%` })))
+      : el('td', { class: 'small', style: 'white-space:nowrap' }, `${u.sessions ?? 0} session${u.sessions === 1 ? '' : 's'} · ${fmtDur(u.totalSessionSec ?? 0)}`),
     el('td', { class: 'small mute' }, ago(u.lastLoginAt)),
     el('td', {}, el('div', { class: 'acts' },
       el('button', { class: 'btn sm', disabled: self && u.status === 'active', onclick: () => patch(u, { status: u.status === 'active' ? 'suspended' : 'active' }, `${u.name} ${u.status === 'active' ? 'suspended' : 'reactivated'}`) }, u.status === 'active' ? 'Suspend' : 'Reactivate'),
-      el('button', { class: 'btn sm', disabled: self, onclick: () => patch(u, { role: u.role === 'admin' ? 'user' : 'admin' }, `${u.name} is now ${u.role === 'admin' ? 'a user' : 'an admin'}`) }, u.role === 'admin' ? 'Make user' : 'Make admin'),
-      el('button', { class: 'btn sm', onclick: () => post(`/api/admin/users/${u.id}/reset-credits`, {}, 'Credits reset') }, 'Reset credits'),
-      el('button', { class: 'btn sm', onclick: () => resetPw(u) }, 'Set password'),
+      can('adminRoleEdit') && el('button', { class: 'btn sm', disabled: self, onclick: () => patch(u, { role: u.role === 'admin' ? 'user' : 'admin' }, `${u.name} is now ${u.role === 'admin' ? 'a user' : 'an admin'}`) }, u.role === 'admin' ? 'Make user' : 'Make admin'),
+      can('adminResetCredits') && el('button', { class: 'btn sm', onclick: () => post(`/api/admin/users/${u.id}/reset-credits`, {}, 'Credits reset') }, 'Reset credits'),
+      can('adminResetPassword') && el('button', { class: 'btn sm', onclick: () => resetPw(u) }, 'Set password'),
       el('button', { class: 'btn sm danger', disabled: self, onclick: () => del(u) }, 'Delete'))));
 }
 
@@ -124,8 +130,12 @@ $('fplan').onchange = $('fstatus').onchange = loadUsers;
 $('out').onclick = logout;
 
 (async () => {
-  [ME, { plans: PLANS }] = [await api('/api/me'), await api('/api/plans')];
-  PLANS = Object.fromEntries(PLANS.map((p) => [p.id, p]));
+  const info = await api('/api/plans');
+  ME = await api('/api/me'); CAPS = info.backend || {};
+  PLANS = Object.fromEntries(info.plans.map((p) => [p.id, p]));
+  if (!can('adminPlanEdit')) { $('fplan').hidden = true; $('upl').closest('div').hidden = true; }   // plan isn't known/editable via the backend yet
+  if (CAPS.signupName === false) $('un').closest('div').hidden = true;                                // the backend doesn't store names yet
+  if (!can('adminRoleEdit')) $('ur').closest('div').hidden = true;                                  // admins are created in the database only
   $('who').textContent = ME.email;
   Object.values(PLANS).forEach((p) => { $('fplan').add(new Option(p.name, p.id)); $('upl').add(new Option(p.name + ' · ' + money(p.price), p.id)); });
   refresh();

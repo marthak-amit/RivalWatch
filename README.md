@@ -37,6 +37,16 @@ Demo logins (seeded on first run): `demo@rivalwatch.dev` / `demo1234` · `admin@
 Every user gets an isolated workspace: own crawl credits, own monitor, and own editable copies of three test competitors.
 Billing is a mock: switching plans just resets the credit allowance.
 
+## Running with the Python backend
+
+`BACKEND_URL=http://localhost:8000 npm start` puts this server in front of the Python backend in `backend/`: login, signup,
+sessions, the admin user list and the public `/v1` crawl API then come from the backend (real Postgres accounts, credits and API keys),
+and competitor sites are crawled by the backend's worker (credits, robots.txt, SSRF protection). The monitoring pipeline
+(snapshots, changes, digests, reports) still runs here until the backend has those endpoints. Real accounts start with an empty
+workspace; *Live demo → Load demo competitors* adds the editable test sites. Full details, route mapping and the list of what the
+backend still needs: [docs/integration/backend-integration.md](docs/integration/backend-integration.md). End-to-end check:
+`npm run test:integration` ([integration/README.md](integration/README.md)).
+
 ## SocialCrawl-style crawl API (per-user key, shown in Account & API)
 
 Modelled on [socialcrawl.dev](https://www.socialcrawl.dev): `x-api-key` auth, one response envelope

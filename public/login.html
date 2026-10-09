@@ -41,12 +41,12 @@
 <script src="/common.js"></script>
 <script>
 const q = new URLSearchParams(location.search);
-let mode = 'in', plans = {};
+let mode = 'in', plans = {}, showName = true;
 
 function setMode(m) {
   mode = m;
   $('t-in').setAttribute('aria-selected', m === 'in'); $('t-up').setAttribute('aria-selected', m === 'up');
-  $('namebox').hidden = m === 'in'; $('go').textContent = m === 'in' ? 'Sign in' : 'Create account & continue';
+  $('namebox').hidden = m === 'in' || !showName; $('go').textContent = m === 'in' ? 'Sign in' : 'Create account & continue';
   $('title').textContent = m === 'in' ? 'Welcome back' : 'Create your account';
   $('pw').autocomplete = m === 'in' ? 'current-password' : 'new-password'; $('err').textContent = '';
 }
@@ -65,12 +65,14 @@ $('form').addEventListener('submit', async (e) => {
 (async () => {
   const d = await api('/api/plans', { noRedirect: true });
   d.plans.forEach((p) => plans[p.id] = p);
+  showName = d.backend?.signupName !== false; if (!showName) $('namebox').hidden = true; // the backend doesn't store names yet
+  const planApplied = d.backend?.planChanges !== false;
   const plan = plans[q.get('plan')];
   if (plan) {
     const annual = q.get('billing') === 'annual';
     const price = annual ? Math.round(plan.price * (1 - d.annualDiscount)) : plan.price;
     $('planchip').replaceChildren(el('span', { class: 'pill acc' }, `${plan.name} plan · ${money(price)}/mo${annual ? ' billed yearly' : ''}`),
-      el('p', { class: 'small mute', style: 'margin-top:6px' }, 'Create your account to start. Already registered? Sign in instead.'));
+      el('p', { class: 'small mute', style: 'margin-top:6px' }, planApplied ? 'Create your account to start. Already registered? Sign in instead.' : 'Create your account to start. New accounts begin on the Starter plan; plan changes aren\'t available yet. Already registered? Sign in instead.'));
     setMode('up');
   }
   const demos = [['Use demo user', d.demo.user], ['Use admin', d.demo.admin]].filter(([, v]) => v);
