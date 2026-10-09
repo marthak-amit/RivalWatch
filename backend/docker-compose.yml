@@ -30,5 +30,14 @@ services:
     depends_on:
       migrate: {condition: service_completed_successfully}
 
+  worker:
+    <<: *app
+    command: ["python", "-m", "competitor_moves.workers.worker"]
+    healthcheck: {disable: true}
+    restart: unless-stopped
+    stop_grace_period: 60s   # lets the current job finish
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+
 volumes:
   pgdata:

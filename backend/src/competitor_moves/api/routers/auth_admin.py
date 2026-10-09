@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from ...db.pool import get_conn
 from ..deps import require_admin
@@ -9,8 +9,8 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 
 @router.post("/login")
-def admin_login(body: Login, conn=Depends(get_conn)):
-    return login_as(conn, body, "admin")
+def admin_login(body: Login, request: Request, conn=Depends(get_conn)):
+    return login_as(conn, body, "admin", request)
 
 
 @router.post("/logout", status_code=204)

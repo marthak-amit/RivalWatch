@@ -1,25 +1,35 @@
 import jwt
 from fastapi import Depends, Header, HTTPException
 
-from ..core.security import decode_token
+from ..core.security import decode_expired_token, decode_token
 from ..db.pool import get_conn
 from ..db.repositories import users
+from ..services import sessions
 
 
 def current_user(authorization: str = Header(None), conn=Depends(get_conn)) -> dict:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(401, "Missing token")
+    token = authorization[7:]
     try:
-        claims = decode_token(authorization[7:])
+        claims = decode_token(token)
         uid = int(claims["sub"])
+    except jwt.ExpiredSignatureError:
+        try:
+            sessions.expire(conn, decode_expired_token(token)["jti"])  # record why the session ended
+        except jwt.PyJWTError:
+            pass
+        raise HTTPException(401, "Session expired") from None
     except (jwt.PyJWTError, ValueError):
         raise HTTPException(401, "Invalid or expired token") from None
-    if users.is_revoked(conn, claims["jti"]):
-        raise HTTPException(401, "Logged out")
     u = users.get_active_by_id(conn, uid)
     if not u or not u["is_active"]:
         raise HTTPException(401, "Account disabled")
-    return {**u, "jti": claims["jti"], "exp": claims["exp"]}
+    try:
+        session = sessions.validate(conn, claims["jti"], u["role"])
+    except sessions.SessionInvalid as e:
+        raise HTTPException(401, str(e)) from None
+    return {**u, "jti": claims["jti"], "session": session}
 
 
 def require_admin(u: dict = Depends(current_user)) -> dict:

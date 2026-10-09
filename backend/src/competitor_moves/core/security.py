@@ -1,7 +1,7 @@
 """Password hashing (scrypt, stdlib) and JWT issue/verify.
 
-Tokens are HS256 JWTs carrying a jti. Logout stores the jti in revoked_tokens, so a logged-out
-token stops working before it expires. Role and is_active are read from the DB on every request.
+Tokens are HS256 JWTs whose jti is the id of a row in `sessions`. The token is only accepted while that
+session is open (see services/sessions.py). Role and is_active are read from the DB on every request.
 """
 import base64
 import hashlib
@@ -36,13 +36,20 @@ def verify_password(password: str, stored: str) -> bool:
 DUMMY_HASH = hash_password("dummy")  # unknown emails cost the same time as wrong passwords
 
 
-def issue_token(user_id: int, role: str) -> str:
+def issue_token(user_id: int, role: str) -> tuple[str, dict]:
+    """Returns (token, claims); the caller records claims["jti"] as a session."""
     now = int(time.time())
-    return jwt.encode({"sub": str(user_id), "role": role, "jti": uuid.uuid4().hex,
-                       "iat": now, "exp": now + TTL[role]}, get_settings().jwt_secret, algorithm=JWT_ALG)
+    claims = {"sub": str(user_id), "role": role, "jti": uuid.uuid4().hex, "iat": now, "exp": now + TTL[role]}
+    return jwt.encode(claims, get_settings().jwt_secret, algorithm=JWT_ALG), claims
 
 
 def decode_token(token: str) -> dict:
     """Raises jwt.PyJWTError on a bad signature, expiry, or missing claims."""
     return jwt.decode(token, get_settings().jwt_secret, algorithms=[JWT_ALG],
                       options={"require": ["exp", "sub", "jti"]})
+
+
+def decode_expired_token(token: str) -> dict:
+    """Signature-checked claims of a token that failed only on expiry, so its session can be closed as 'expired'."""
+    return jwt.decode(token, get_settings().jwt_secret, algorithms=[JWT_ALG],
+                      options={"require": ["exp", "sub", "jti"], "verify_exp": False})

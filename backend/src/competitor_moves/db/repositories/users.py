@@ -24,8 +24,28 @@ def get_active_by_id(conn, user_id: int) -> dict | None:
     return conn.execute("select id,email,role,is_active from users where id=%s", (user_id,)).fetchone()
 
 
-def list_users(conn) -> list[dict]:
-    return conn.execute("select id,email,role,is_active,created_at from users order by id").fetchall()
+def list_users(conn, idle_user_sec: int, idle_admin_sec: int) -> list[dict]:
+    """Users plus session time: active_now, session_count, last_login_at, last/total session seconds."""
+    return conn.execute("""
+        select u.id, u.email, u.role, u.is_active, u.created_at,
+               coalesce(s.active_now, false) as active_now,
+               coalesce(s.session_count, 0) as session_count,
+               s.last_login_at,
+               s.last_session_seconds,
+               coalesce(s.total_session_seconds, 0) as total_session_seconds
+        from users u
+        left join (
+          select user_id,
+                 count(*) as session_count,
+                 max(started_at) as last_login_at,
+                 (array_agg(extract(epoch from last_seen_at - started_at)::bigint order by started_at desc))[1]
+                   as last_session_seconds,
+                 sum(extract(epoch from last_seen_at - started_at))::bigint as total_session_seconds,
+                 bool_or(ended_at is null and expires_at > now() and last_seen_at > now() - make_interval(
+                   secs => case when role = 'admin' then %s else %s end)) as active_now
+          from sessions group by user_id
+        ) s on s.user_id = u.id
+        order by u.id""", (idle_admin_sec, idle_user_sec)).fetchall()
 
 
 def set_active(conn, user_id: int, is_active: bool) -> dict | None:
@@ -39,11 +59,12 @@ def delete_user(conn, user_id: int) -> bool:
     return conn.execute("delete from users where id=%s and role='user' returning id", (user_id,)).fetchone() is not None
 
 
-def is_revoked(conn, jti: str) -> bool:
-    return conn.execute("select 1 from revoked_tokens where jti=%s", (jti,)).fetchone() is not None
+def find_by_api_key(conn, api_key: str) -> dict | None:
+    if not api_key:
+        return None
+    return conn.execute("select id,email,role,credits,plan from users where api_key=%s and is_active",
+                        (api_key,)).fetchone()
 
 
-def revoke(conn, jti: str, exp: int) -> None:
-    conn.execute("delete from revoked_tokens where expires_at < now()")
-    conn.execute("insert into revoked_tokens(jti, expires_at) values (%s, to_timestamp(%s)) on conflict do nothing",
-                 (jti, exp))
+def account(conn, user_id: int) -> dict:
+    return conn.execute("select name,plan,credits,api_key,last_login_at from users where id=%s", (user_id,)).fetchone()
