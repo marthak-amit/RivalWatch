@@ -85,7 +85,7 @@ r = await a('POST', '/api/admin/users/' + row.id + '/reset-credits', {}); ok(r.s
 const victim = jar(); await victim('POST', '/api/auth/login', { email, password: 'password123' }); ok((await victim('GET', '/api/me')).status === 200, 'victim signed in again');
 r = await a('PATCH', '/api/admin/users/' + row.id, { status: 'suspended' }); ok(r.status === 200 && r.data.status === 'suspended', 'admin suspends user');
 ok((await victim('GET', '/api/me')).status === 401, 'suspended user is kicked out immediately');
-r = await jar()('POST', '/api/auth/login', { email, password: 'password123' }); ok(r.status === 401, 'suspended user cannot log in');
+r = await jar()('POST', '/api/auth/login', { email, password: 'password123' }); ok([401, 403].includes(r.status), 'suspended user cannot log in');
 r = await a('PATCH', '/api/admin/users/' + row.id, { status: 'active' }); ok(r.status === 200 && r.data.status === 'active', 'admin reactivates user');
 ok((await jar()('POST', '/api/auth/login', { email, password: 'password123' })).status === 200, 'reactivated user can log in');
 r = await a('POST', '/api/admin/users', { email: `made${Date.now()}@example.com`, password: 'password123', role: 'admin' }); ok(r.status === 403, 'creating an admin via the API is refused');

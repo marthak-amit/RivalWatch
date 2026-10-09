@@ -57,6 +57,7 @@
 <script>
 let PLANS = {}, ME = null, users = [], CAPS = {}; // CAPS: what the backend supports (all true in standalone mode)
 const can = (k) => CAPS[k] !== false;
+const feat = (k) => CAPS.enabled === true && CAPS[k] !== false; // only a backend that serves the full /api/* contract has these
 const fmtDur = (sec) => sec >= 3600 ? Math.round(sec / 360) / 10 + ' h' : Math.max(1, Math.round(sec / 60)) + ' min';
 
 const initials = (n) => n.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
@@ -98,6 +99,7 @@ function rowFor(u) {
       can('adminRoleEdit') && el('button', { class: 'btn sm', disabled: self, onclick: () => patch(u, { role: u.role === 'admin' ? 'user' : 'admin' }, `${u.name} is now ${u.role === 'admin' ? 'a user' : 'an admin'}`) }, u.role === 'admin' ? 'Make user' : 'Make admin'),
       can('adminResetCredits') && el('button', { class: 'btn sm', onclick: () => post(`/api/admin/users/${u.id}/reset-credits`, {}, 'Credits reset') }, 'Reset credits'),
       can('adminResetPassword') && el('button', { class: 'btn sm', onclick: () => resetPw(u) }, 'Set password'),
+      feat('adminStore') && u.role !== 'admin' && el('button', { class: 'btn sm', onclick: () => openStore(u) }, 'Store'),
       el('button', { class: 'btn sm danger', disabled: self, onclick: () => del(u) }, 'Delete'))));
 }
 
@@ -108,6 +110,56 @@ const del = (u) => confirm(`Delete ${u.email}? This removes their account and wo
 function resetPw(u) {
   const pw = prompt(`New temporary password for ${u.email} (min 8 characters). Their sessions will be signed out.`);
   if (pw) post(`/api/admin/users/${u.id}/reset-password`, { password: pw }, 'Password updated');
+}
+
+// ---- a customer's own (Magento) store: the admin can connect and manage it for them -------------------------------
+const CRONS = [['0 2 * * *', 'Every day at 02:00 UTC'], ['0 */12 * * *', 'Every 12 hours'], ['0 */6 * * *', 'Every 6 hours'], ['0 * * * *', 'Every hour']];
+function openStore(u) {
+  const base = `/api/admin/users/${u.id}/store`;
+  const body = el('div', { class: 'mb' }, el('span', { class: 'mute' }, 'Loading…'));
+  const dlg = el('dialog', { class: 'modal', 'aria-label': 'Store for ' + u.email }, el('form', { method: 'dialog' },
+    el('div', { class: 'mh' }, el('div', {}, el('b', { style: 'font-size:16px' }, 'Store: ' + u.name), el('div', { class: 'small mute' }, u.email)), el('button', { class: 'iconbtn', type: 'button', 'aria-label': 'Close', onclick: () => dlg.close() }, '✕')),
+    body));
+  dlg.addEventListener('close', () => dlg.remove()); document.body.append(dlg); dlg.showModal();
+  let timer;
+  const load = async () => { clearTimeout(timer); try { paint((await api(base)).store); } catch (e) { body.replaceChildren(el('p', { class: 'err' }, e.message)); } };
+  const act = async (fn, ok) => { try { await fn(); if (ok) toast(ok); } catch (e) { toast(e.message); } await load(); await refresh(); };
+  function form(s) {
+    const err = el('p', { class: 'err', role: 'alert' });
+    const url = el('input', { type: 'url', placeholder: 'https://shop.example.com', value: s?.url || '', readonly: !!s }), code = el('input', { placeholder: 'default', value: s?.storeCode || '' });
+    const token = el('input', { type: 'password', autocomplete: 'off', placeholder: s?.hasToken ? 'Stored. Enter a new one to replace it.' : 'Optional' });
+    const drop = s?.hasToken ? el('input', { type: 'checkbox' }) : null;
+    const cron = el('select', {}, CRONS.map(([v, t]) => el('option', { value: v, selected: (s?.cron || CRONS[0][0]) === v }, t)));
+    if (s?.cron && !CRONS.some(([v]) => v === s.cron)) cron.prepend(el('option', { value: s.cron, selected: true }, s.cron));
+    const save = el('button', { class: 'btn primary', type: 'submit' }, s ? 'Save' : 'Connect & sync');
+    return el('form', { class: 'stack', novalidate: true, onsubmit: async (e) => {
+      e.preventDefault(); err.textContent = ''; save.disabled = true;
+      const b = { cron: cron.value }; if (!s) b.url = url.value.trim(); if (code.value.trim() || s) b.storeCode = code.value.trim() || null;
+      if (drop?.checked) b.token = ''; else if (token.value) b.token = token.value;
+      try { paint((await api(base, { method: s ? 'PATCH' : 'PUT', body: b })).store); toast(s ? 'Store settings saved' : 'Store connected'); refresh(); } catch (x) { err.textContent = x.message; save.disabled = false; }
+    } },
+      el('div', {}, el('label', {}, 'Store URL'), url), el('div', { class: 'fgrid' }, el('div', {}, el('label', {}, 'Store view code'), code), el('div', {}, el('label', {}, 'Sync schedule (UTC)'), cron)),
+      el('div', {}, el('label', {}, 'Access token'), token, el('div', { class: 'fhint' }, 'Optional. Stored encrypted and never shown again.'), drop && el('label', { class: 'chk' }, drop, 'Remove the stored token')),
+      err, el('div', { class: 'row' }, save, s && el('button', { class: 'btn', type: 'button', onclick: () => paint(s, true) }, 'Cancel')));
+  }
+  function paint(s, view) {
+    clearTimeout(timer); if (s?.syncing) timer = setTimeout(load, 3000);
+    if (!s) return body.replaceChildren(el('p', { class: 'small mute' }, 'No store is connected for this customer. Connect their Magento shop so their catalogue is read and compared.'), form(null));
+    if (s && view === 'edit') return body.replaceChildren(form(s));
+    const row = (k, v) => el('div', { class: 'kv' }, el('span', { class: 'k' }, k), el('span', { class: 'v2' }, v));
+    body.replaceChildren(...[
+      el('div', { class: 'row between wrapx' }, el('div', {}, el('b', {}, s.name || s.url), el('div', { class: 'small' }, s.url)),
+        s.syncing ? el('span', { class: 'pill acc' }, 'Syncing…') : s.enabled === false ? el('span', { class: 'pill' }, 'Paused') : el('span', { class: 'pill ' + (s.status === 'error' ? 'bad' : 'good') }, s.status === 'error' ? 'Error' : 'Connected')),
+      s.status === 'error' && s.error && el('p', { class: 'err' }, s.error),
+      el('div', {}, row('Products', (s.productCount ?? 0).toLocaleString() + (s.currency ? ' · ' + s.currency : '')), row('Last sync', s.lastSync ? ago(s.lastSync) : 'Not yet'), row('Next sync', s.nextSync ? new Date(s.nextSync).toLocaleString() : '–'),
+        row('Schedule', (CRONS.find(([v]) => v === s.cron) || [, s.cron || '–'])[1]), row('Access token', s.hasToken ? 'Stored (encrypted)' : 'None')),
+      el('div', { class: 'row wrapx' },
+        el('button', { class: 'btn primary', type: 'button', disabled: !!s.syncing, onclick: () => act(() => api(base + '/sync', { method: 'POST' }), 'Sync started') }, 'Sync now'),
+        el('button', { class: 'btn', type: 'button', onclick: () => paint(s, 'edit') }, 'Edit'),
+        el('button', { class: 'btn', type: 'button', onclick: () => act(() => api(base, { method: 'PATCH', body: { enabled: s.enabled === false } }), s.enabled === false ? 'Sync resumed' : 'Sync paused') }, s.enabled === false ? 'Resume' : 'Pause'),
+        el('span', { style: 'flex:1' }), el('button', { class: 'btn danger', type: 'button', onclick: () => confirm(`Disconnect ${u.email}'s store? Its synced data is deleted.`) && act(() => api(base, { method: 'DELETE' }), 'Store disconnected') }, 'Disconnect'))].filter(Boolean));
+  }
+  load();
 }
 
 async function loadAudit() {

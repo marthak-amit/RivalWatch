@@ -1,20 +1,35 @@
 # Integrating the UI with the Python backend
 
-The Node server in this repo (`server.js`) can run in front of the Python backend (`backend/`). Set `BACKEND_URL` and it
-becomes a thin backend-for-frontend: the browser still talks to the same `/api/*` it always has, and each route is
-mapped to the real backend call where one exists. Without `BACKEND_URL` everything runs standalone (demo mode), exactly
-as before.
+The UI talks to one contract, `/api/*`. The Python backend (`backend/`) now serves that contract itself, so there are three ways to run:
 
-```
-browser ──/api/*, /v1/*──▶ Node (server.js) ──/user/*, /admin/*, /v1/*──▶ FastAPI ──▶ Postgres
-                              │                                              ▲
-                              └── monitoring pipeline (local)    crawl worker ─┘
-```
+| Mode | When | What happens |
+|---|---|---|
+| **Direct** | `docker compose up` in `backend/`, open http://localhost:8031 | The backend serves `public/` and `/api/*`. Nothing else is needed. |
+| **Native** | `BACKEND_URL=... npm start`, backend answers `GET /api/plans` with `backend.enabled` | `server.js` serves the pages and forwards `/api/*` and `/v1/*` unchanged (cookies, client IP via `X-Forwarded-For`). The startup log prints `native mode`. |
+| **Adapter** | `BACKEND_URL=... npm start` against an older backend with only `/user`, `/admin`, `/v1` (or `BACKEND_MODE=bff`) | `server.js` maps each `/api/*` route to the backend call where one exists and runs the monitoring pipeline in Node memory (sections below). |
+| Standalone | no `BACKEND_URL` | demo mode with built-in accounts and editable test competitors |
 
-Why a BFF and not calling the backend from the browser: the backend uses bearer tokens; here the token lives in an
-`HttpOnly; SameSite=Lax` cookie (`rw_session`) so page JavaScript never sees it. The design doc
-(`docs/superpowers/specs/2026-10-09-ui-alignment.md`) plans for the backend to serve `/api/*` itself; when it does, the
-browser can talk to it directly with no UI change, because the UI only knows `/api/*`.
+`BACKEND_MODE=auto|native|bff` (default `auto`). The probe is repeated every second while the backend is unreachable and every 10 s if it answered without `/api/*`.
+
+## What the UI shows in native mode
+
+Features are gated by `GET /api/plans -> backend` so the standalone demo and the adapter hide what they can't do (the adapter sets `competitorSettings`, `products`, `store`, `adminStore` to `false`).
+
+* **Competitor cards**: live crawl progress ("Crawling · 12 pages · 7 products"), "Catalog: 4 collected of ~6 · shopify", partial-crawl marker, blocked/paused notices; every card keeps the same size.
+* **Settings** (per competitor): name, product limit (1-5000), page budget, sort (site order, newest, price asc/desc, biggest discount), schedule (presets or a cron expression, UTC),
+  scope (tick categories from `GET /api/competitors/{id}/categories`), advanced crawl settings. Only changed keys are sent on `PATCH`; clearing a numeric crawl setting sends `null` (back to the server default). The same fields are available (collapsed) when adding a competitor.
+* **Products**: `GET /api/products` with the facets feeding the dropdowns, 300 ms debounced search, price range, on sale / in stock, sort, paging (50), and an All competitors / Our store switch.
+* **Changes / reports**: labels and tags for `on_sale`, `out_of_stock`, `back_in_stock`, `product_updated`, `new_category`, `page_changed`; product counts use `snapshot.productCount` (the snapshot's `products` map only holds the 25 most recent).
+* **Our store** (appears when `GET /api/store` answers 200): connect (`PUT`), edit (`PATCH`: token omitted keeps it, `""` removes it, URL is fixed), pause/resume (`enabled`), sync now, disconnect, and "View our products" (`competitor=ours`).
+  **Admin**: a *Store* button per customer opens the same controls on `/api/admin/users/{id}/store` (shown when `backend.enabled` and `adminStore !== false`).
+
+Defensive details: snapshots with a missing profile, promotions or pages are normalised before rendering; the *Add a competitor* form is kept across repaints so a refresh never wipes what you typed;
+the dashboard polls every 2 s while a crawl runs and every 5 s otherwise.
+
+## Adapter mode (older backends)
+
+The Node server becomes a thin backend-for-frontend: the browser still talks to the same `/api/*`, and each route is
+mapped to the real backend call where one exists.
 
 ## Run it
 
@@ -26,8 +41,8 @@ docker compose up -d --build
 # 2. an admin (admins are created in the database only; compose publishes Postgres on :5433)
 python backend/scripts/create_admin.py boss@example.com 'a-long-password' | psql postgresql://postgres:postgres@localhost:5433/competitor
 
-# 3. the UI
-BACKEND_URL=http://localhost:8000 npm start        # http://localhost:3000
+# 3. the UI (optional: the backend already serves it on :8031)
+BACKEND_URL=http://localhost:8031 npm start        # http://localhost:3000 (native mode)
 ```
 
 > I verified the integration by running the same pieces directly (Postgres 16, `alembic upgrade head`, `uvicorn`, and
@@ -72,29 +87,23 @@ sent to the backend (it blocks local addresses by design); they stay local and a
 Errors from the backend show on the competitor card: `blocked by the site's robots.txt`,
 `private/internal addresses are blocked`, `insufficient credits`.
 
-## What the backend still needs (for the backend owner)
+## What the backend still needs
 
-The integration works around each of these; none requires a UI change when they're added.
+Done in the backend (no UI work left): the whole `/api/*` contract, signup name/plan, plan changes, key rotation, the admin list with plan/credits, plan edits, reset credits/password, audit log, scrape `description`, 403 for disabled accounts, a login rate limit that clears on success, scheduled crawls that skip suspended owners.
 
-1. **The `/api/*` contract** from the design doc §2: `state`, `competitors` (`POST`/`PATCH`/`DELETE`), `crawl`, `reports`,
-   `reports/summary`. Today the monitoring pipeline, change history, digests and reports run in Node memory, so they
-   reset on restart and aren't shared between instances. When these exist, point the BFF at them (or serve the UI from the backend).
-2. **Account fields**: signup should store `name` and `plan` (the form sends both); `GET /user/me` should include `created_at`.
-3. **Plan changes and key rotation**: `POST /api/me/plan` (resets credits to the plan allowance) and `POST /api/me/rotate-key`.
-4. **Admin list** (`GET /admin/users`) should return `name`, `plan`, `credits` so the panel can show plan mix, MRR and usage;
-   plus plan/role edits, `reset-credits`, `reset-password`, and an audit log.
-5. **Scrape result** has no `description` (meta description), so the company profile falls back to the first paragraph.
-6. **Disabled accounts** get the same `401 Invalid credentials` as a wrong password, so the UI can't say "account disabled".
-7. **A NUL byte in the email returns 500** from `POST /user/login`, `/admin/login` and `/user/signup`
-   (`psycopg.DataError: PostgreSQL text fields cannot contain NUL (0x00) bytes`). The UI server now rejects control
-   characters before calling the backend, but direct API callers still hit it; reject them in the `Credentials`/`Login` schemas.
-8. **No login rate limiting on the backend itself.** The UI server limits attempts (10 failures per 5 min per IP+email),
-   but anyone calling `/user/login` directly is unlimited.
-9. **Dashboard crawls aren't metered for demo sites**, and scheduled crawls keep running for a suspended user's
-   workspace until their API key is rejected (the backend rejects it, so those crawls just fail).
+Fixed while integrating (in `backend/`): `/api/auth/login` and `/api/auth/signup` answered **500** for a NUL byte in the email or password (now 400), and the `/api` login limiter counted **successful** logins, so 10 good logins in 5 minutes locked a user out (it now clears on success). Tests added in `backend/tests/integration/test_ui_api.py`. `/theme.js` was added to the backend's page list (the light/dark toggle script).
+
+Still open:
+
+1. **`/api/store` routes** (Our store, `PATCH` and the admin `/users/{id}/store` routes) are documented but not in the backend code in this repository (`integrations/magento/` is empty). The UI is ready and appears automatically when `GET /api/store` answers; it was tested against a fake of the documented contract.
+2. **Comparison with our own prices and the AI analyst digest** (milestone M6; digests are rule-based, `source: "rules"`), **applying prices in Magento** (M7) and **production readiness** (M8: no public DB port, secrets, DB-backed rate limits, backups, CI).
+3. **Behind a proxy the backend must trust `X-Forwarded-For`** for its login limiter (uvicorn `--forwarded-allow-ips`; the default only trusts 127.0.0.1). Otherwise every user shares the proxy's IP.
+4. **Product images** are not shown: the pages' CSP is `img-src 'self' data:`. Allow `https:` in both `pages.py` and `server.js` if you want thumbnails.
+5. **The backend's own test-suite default** points at Postgres on :5433 (the compose file's published port); set `DATABASE_URL` otherwise.
 
 ## Verifying it
 
+* `npm run test:native`: 89 checks against the real backend through native mode (accounts, real product crawling of a stand-in shop, settings, product search, change detection, reports, admin, `/v1`).
 * `npm test`: unit tests, including the integration layer against an in-process fake of the backend's contract.
 * `npm run test:auth`: login/logout checks (58 standalone, 61 against the real backend: cookies, server-side session revocation,
   replay of old cookies, multiple devices, suspension, rate limiting, input handling). Works in both modes.

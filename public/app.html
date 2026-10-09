@@ -12,6 +12,7 @@
   :root[data-theme=dark] { --s1:#3987e5; --s2:#d95926; --side:#12141a; --side-hover:#1d2029; }
   @media (prefers-color-scheme: dark) { :root:not([data-theme=light]) { --s1:#3987e5; --s2:#d95926; --side:#12141a; --side-hover:#1d2029; } }
 
+  .fgrid3 { display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); gap:12px; }
   .shell { min-height:100vh; }
   /* Pinned to the viewport edges (not sticky/100vh) so it can never move or be scrolled, whatever the browser toolbar does */
   .sidebar { background:var(--side); border-right:1px solid var(--line); position:fixed; left:0; top:0; bottom:0; width:260px; z-index:20; display:flex; flex-direction:column; padding:16px 12px; gap:14px; overflow:hidden; overflow:clip; overscroll-behavior:none; }
@@ -106,13 +107,15 @@
   /* competitor cards: equal width (empty tracks are kept, so a lone card is not stretched) and equal height (fixed structure) */
   .cards { display:grid; gap:14px; grid-template-columns:repeat(auto-fill, minmax(min(340px, 100%), 1fr)); align-items:stretch; }
   .ccard { display:flex; flex-direction:column; min-width:0; }
+  .crawling { color:var(--acc); font-weight:600; }
+  .spin { display:inline-block; vertical-align:-1px; margin-right:6px; width:11px; height:11px; border-radius:50%; border:2px solid var(--line); border-top-color:var(--acc); animation:spin .8s linear infinite; } @keyframes spin { to { transform:rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spin { animation:none; } }
   .ell { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
   .desc { margin:4px 0 6px; font-size:13px; line-height:1.5; height:4.5em; overflow:hidden; color:var(--mute); display:-webkit-box; -webkit-line-clamp:3; line-clamp:3; -webkit-box-orient:vertical; }
   .kv.one { align-items:center; box-sizing:border-box; height:34px; padding-block:0; line-height:20px; } .kv.one .k { white-space:nowrap; } .kv.one .v2 { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .kv.one .v2 > * { margin-right:6px; }
   .pages1 { display:flex; gap:6px; flex-wrap:nowrap; overflow:hidden; height:24px; align-items:center; } .pages1 .pill { flex:0 1 auto; min-width:0; max-width:36%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .pos1 { height:3.4em; margin:0; } .pos1 li { min-height:1.6em; }
   .clamp { display:-webkit-box; -webkit-line-clamp:3; line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
-  .kv { display:grid; grid-template-columns:104px 1fr; gap:8px; padding:6px 0; border-top:1px solid var(--line); font-size:13px; } .kv .k { color:var(--mute); } .kv .v2 { display:flex; flex-wrap:wrap; gap:6px; align-items:center; min-width:0; overflow-wrap:anywhere; }
   a.chip { text-decoration:none; padding:2px 10px; font-size:12px; }
   tr.go { cursor:pointer; } tr.go:hover td { background:var(--acc-soft); }
   .linkbtn { background:none; border:0; color:var(--acc); font:inherit; font-weight:600; cursor:pointer; padding:0; } .linkbtn:hover { text-decoration:underline; }
@@ -160,6 +163,9 @@ const ICONS = {
   logout: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4 M16 17l5-5-5-5 M21 12H9', menu: 'M3 6h18 M3 12h18 M3 18h18',
   download: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3', printer: 'M6 9V2h12v7 M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2 M6 14h12v8H6z',
   sparkle: 'M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z',
+  products: 'M21 8l-9-5-9 5v8l9 5 9-5z M3 8l9 5 9-5 M12 13v8',
+  store: 'M3 9l1.5-5h15L21 9 M3 9v11h18V9 M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0 M9 20v-6h6v6',
+  settings: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
 };
 const NS = 'http://www.w3.org/2000/svg';
 const svg = (tag, attrs = {}, ...kids) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); e.append(...kids.flat().filter((x) => x != null)); return e; };
@@ -167,15 +173,31 @@ const icon = (n, size = 18) => svg('svg', { viewBox: '0 0 24 24', width: size, h
 const btnI = (n, label, props = {}) => el('button', { class: 'btn', ...props }, icon(n, 16), label);
 
 // ---------- state ----------
-const NAV = [['Monitor', [['overview', 'Overview'], ['competitors', 'Competitors'], ['changes', 'Changes']]], ['Insights', [['reports', 'Reports'], ['digests', 'AI digests']]], ['Tools', [['demo', 'Live demo'], ['account', 'Account & API']]]];
-const TITLES = { overview: 'Overview', competitors: 'Competitors', changes: 'Changes', reports: 'Reports', digests: 'AI digests', demo: 'Live demo', account: 'Account & API' };
+const EMPTY_PROFILE = { headline: '', description: '', positioning: [], socials: [], emails: [], keyPages: [] };
+const list = (v) => (Array.isArray(v) ? v : []);
+/** Backends may leave parts of a snapshot out (no profile found, no promotions...): fill them so the views never crash. */
+function normalise(c) {
+  const s = c.snapshot; if (!s) return c;
+  s.products = s.products && typeof s.products === 'object' ? s.products : {}; s.promotions = list(s.promotions); s.pages = list(s.pages);
+  if (s.profile) { const p = s.profile; s.profile = { ...EMPTY_PROFILE, ...p, positioning: list(p.positioning), socials: list(p.socials), emails: list(p.emails), keyPages: list(p.keyPages) }; }
+  return c;
+}
+/** Products collected for a competitor. `snapshot.products` only holds the most recent few, `productCount` is the full number. */
+const prodCount = (snap) => (snap ? snap.productCount ?? Object.keys(snap.products).length : 0);
+const NAV = [['Monitor', [['overview', 'Overview'], ['competitors', 'Competitors'], ['products', 'Products'], ['changes', 'Changes']]], ['Insights', [['reports', 'Reports'], ['digests', 'AI digests']]], ['Tools', [['store', 'Our store'], ['demo', 'Live demo'], ['account', 'Account & API']]]];
+const TITLES = { overview: 'Overview', competitors: 'Competitors', products: 'Products', store: 'Our store', changes: 'Changes', reports: 'Reports', digests: 'AI digests', demo: 'Live demo', account: 'Account & API' };
 let S = null, ME = null, R = { week: null, month: null }, PLANS = {}, sig = '';
 let CAPS = {}; // what the backend supports (everything, in standalone mode)
 const can = (k) => CAPS[k] !== false;
+// Features only a backend that serves the full /api/* contract has (competitor settings, products, our store). The standalone demo
+// and the older adapter don't send these flags, so they stay hidden there; a native backend leaves them unset = available.
+const feat = (k) => CAPS.enabled === true && CAPS[k] !== false;
+let STORE_OK = false; // set once GET /api/store answers (older backends don't have it)
+const allowed = (t) => !((t === 'demo' && !can('demo')) || (t === 'products' && !feat('products')) || (t === 'store' && !(feat('store') && STORE_OK)));
 let tab = (location.hash || '#overview').slice(1); if (!TITLES[tab]) tab = 'overview';
 let selComp = ''; try { selComp = sessionStorage.getItem('rw_comp') || ''; } catch { /* storage may be blocked */ }
 let period = 'week', showTable = false, summary = null, summarizing = false, flt = { type: '', comp: '' }, selSite = '', editMsg = 'Pick an edit, then crawl.';
-const TYPE_LABEL = { price_change: 'price change', product_added: 'product added', product_removed: 'product removed', new_promo: 'new promo', promo_ended: 'promo ended', new_page: 'new page', page_removed: 'page removed' };
+const TYPE_LABEL = { on_sale: 'on sale', out_of_stock: 'out of stock', back_in_stock: 'back in stock', product_updated: 'product updated', new_category: 'new category', page_changed: 'page changed', price_change: 'price change', product_added: 'product added', product_removed: 'product removed', new_promo: 'new promo', promo_ended: 'promo ended', new_page: 'new page', page_removed: 'page removed' };
 const SERIES = [['product', 'Product & price', 's1', 'var(--s1)'], ['page', 'Pages & promotions', 's2', 'var(--s2)']];
 const fmtDay = (d, o) => new Date(d + 'T00:00:00Z').toLocaleDateString('en', { timeZone: 'UTC', ...o });
 const fmtTime = (iso) => new Date(iso).toLocaleString('en', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
@@ -257,14 +279,14 @@ function compFilter() {
       : el('select', { id: 'fComp2', class: 'inline', 'aria-label': 'Competitor', onchange: (e) => setComp(e.target.value) }, opts.map(([id, n]) => el('option', { value: id, selected: id === selComp }, n))));
 }
 const priceRange = (snap) => {
-  const ps = Object.values(snap?.products || {}); if (!ps.length) return 'no prices found';
+  const ps = Object.values(snap?.products || {}).filter((p) => p.amount != null); if (!ps.length) return 'no prices found';
   const lo = ps.reduce((a, b) => (b.amount < a.amount ? b : a)), hi = ps.reduce((a, b) => (b.amount > a.amount ? b : a));
   return lo === hi ? lo.price : `${lo.price} – ${hi.price}`;
 };
 const sumKey = (p) => p + '|' + selComp;
 function summaryCard(p, who) {
   const mine = summary && summary.key === sumKey(p);
-  return el('div', { class: 'card' }, el('div', { class: 'row between wrapx' }, el('div', { class: 'h-sec', style: 'margin:0' }, `AI summary · ${who} · ${p === 'week' ? 'this week' : 'this month'}${mine ? ' · ' + (summary.source === 'claude' ? 'Claude' : 'rule-based') : ''}`),
+  return el('div', { class: 'card' }, el('div', { class: 'row between wrapx' }, el('div', { class: 'h-sec', style: 'margin:0' }, `AI summary · ${who} · ${p === 'week' ? 'this week' : 'this month'}${mine ? ' · ' + ({ claude: 'Claude', gemini: 'Gemini' }[summary.source] || 'rule-based') : ''}`),
     btnI('sparkle', summarizing ? 'Summarising…' : mine ? 'Regenerate' : 'Generate', { class: 'btn sm', disabled: summarizing, onclick: () => genSummary(p) })),
     mine ? el('div', { style: 'margin-top:8px' }, digestBody(summary)) : el('p', { class: 'mute', style: 'margin-top:6px' }, `Get a short summary and suggested actions for ${who}.`));
 }
@@ -297,13 +319,13 @@ function overviewAll(w) {
   const rows = S.competitors.map((c) => {
     const snap = c.snapshot, n = w.byCompetitor.find((x) => x.id === c.id), last = S.changes.find((x) => x.competitorId === c.id);
     return el('tr', { class: 'go', tabindex: 0, onclick: () => setComp(c.id), onkeydown: (e) => e.key === 'Enter' && setComp(c.id) },
-      el('td', {}, statusDot(c), el('b', {}, c.name), !c.enabled && el('span', { class: 'pill bad', style: 'margin-left:8px' }, 'Disabled'), c.enabled && c.error && el('div', { class: 'err' }, c.error)), el('td', { class: 'n' }, snap ? Object.keys(snap.products).length : '–'), el('td', { class: 'n' }, snap ? priceRange(snap) : '–'),
+      el('td', {}, statusDot(c), el('b', {}, c.name), !c.enabled && el('span', { class: 'pill bad', style: 'margin-left:8px' }, 'Disabled'), c.enabled && c.error && el('div', { class: 'err' }, c.error)), el('td', { class: 'n' }, snap ? prodCount(snap) : '–'), el('td', { class: 'n' }, snap ? priceRange(snap) : '–'),
       el('td', { class: 'n' }, snap ? snap.promotions.length : '–'), el('td', { class: 'n' }, snap ? snap.pages.length : '–'), el('td', { class: 'n' }, n ? n.total : 0),
       el('td', { class: 'n' }, last ? ago(last.ts) : '–'), el('td', {}, el('span', { class: 'linkbtn' }, 'View →')));
   });
   return [
     el('div', { class: 'grid g4', style: 'margin-bottom:14px' },
-      kpi(w.total, 'Changes this week', delta(w)), kpi(S.competitors.length, 'Competitors monitored', `${S.competitors.reduce((n, c) => n + Object.keys(c.snapshot?.products || {}).length, 0)} products tracked`),
+      kpi(w.total, 'Changes this week', delta(w)), kpi(S.competitors.length, 'Competitors monitored', `${S.competitors.reduce((n, c) => n + prodCount(c.snapshot), 0)} products tracked`),
       kpi(S.credits.toLocaleString(), 'Credits left', `${used.toLocaleString()} used of ${S.plan.credits.toLocaleString()}`, el('div', { class: 'bar2' }, el('i', { style: `width:${Math.max(0, Math.min(100, S.credits / S.plan.credits * 100))}%` }))),
       kpi(S.lastRun ? ago(S.lastRun) : '–', 'Last crawl', `${w.crawls.count} crawls this week`)),
     el('div', { style: 'margin-bottom:14px' }, activityCard(w, { weekly: true, linkToReports: true })),
@@ -322,17 +344,18 @@ function overviewOne(c, w) {
   const pricing = el('div', { class: 'card' },
     el('div', { class: 'row between wrapx' }, el('div', {}, el('b', {}, statusDot(c), c.name), el('div', { class: 'small' }, el('a', { href: c.url, target: '_blank', rel: 'noopener noreferrer' }, c.url))), snap && el('span', { class: 'small mute' }, 'Snapshot ' + ago(snap.ts))),
     c.error && el('div', { class: 'err' }, c.error),
-    el('div', { class: 'h-sec', style: 'margin-top:14px' }, 'Current pricing'),
-    prods.length ? el('div', { class: 'scroll' }, el('table', { class: 't' }, el('thead', {}, el('tr', {}, el('th', {}, 'Plan'), el('th', { class: 'n' }, 'Price'), el('th', {}, 'Last change'))),
+    el('div', { class: 'h-sec', style: 'margin-top:14px' }, feat('products') ? 'Latest products & prices' : 'Current pricing'),
+    prods.length ? el('div', { class: 'scroll' }, el('table', { class: 't' }, el('thead', {}, el('tr', {}, el('th', {}, feat('products') ? 'Product' : 'Plan'), el('th', { class: 'n' }, 'Price'), el('th', {}, 'Last change'))),
       el('tbody', {}, prods.map((p) => { const h = lastFor(p.name); return el('tr', {}, el('td', {}, p.name), el('td', { class: 'n' }, el('b', {}, p.price)),
         el('td', { class: 'small mute' }, h ? `${h.from} → ${h.to} (${h.pct > 0 ? '+' : ''}${h.pct}%) · ${ago(h.ts)}` : 'no change recorded')); })))) : el('p', { class: 'mute' }, snap ? 'No prices found on the crawled pages.' : 'Baseline crawl pending…'),
+    feat('products') && prodCount(snap) > prods.length && el('p', { style: 'margin-top:8px' }, el('button', { class: 'linkbtn', onclick: () => { PF = { ...PF0, competitor: c.id }; PD = null; go('products'); } }, `Browse all ${prodCount(snap).toLocaleString()} products →`)),
     el('div', { class: 'h-sec', style: 'margin-top:14px' }, 'Promotions'),
     snap && snap.promotions.length ? el('ul', { class: 'plain' }, snap.promotions.map((x) => el('li', {}, '🏷 ' + x))) : el('p', { class: 'mute' }, 'No active promotions detected.'),
     el('div', { class: 'h-sec', style: 'margin-top:14px' }, 'Pages tracked'),
     el('div', { class: 'row wrapx', style: 'gap:6px' }, snap ? snap.pages.map((x) => el('span', { class: 'pill' }, x)) : null));
   return [
     el('div', { class: 'grid g4', style: 'margin-bottom:14px' },
-      kpi(w.total, 'Changes this week', delta(w)), kpi(prods.length, 'Products tracked', snap ? priceRange(snap) : 'baseline pending'),
+      kpi(w.total, 'Changes this week', delta(w)), kpi(prodCount(snap), 'Products tracked', snap ? priceRange(snap) : 'baseline pending'),
       kpi(snap ? snap.pages.length : '–', 'Pages tracked', snap ? `${snap.pagesCrawled} crawled last run` : ''), kpi(snap ? snap.promotions.length : '–', 'Active promotions', snap?.promotions[0] || 'none detected')),
     el('div', { style: 'margin-bottom:14px' }, activityCard(w, { weekly: true, linkToReports: true })),
     el('div', { class: 'grid g2', style: 'margin-bottom:14px' }, el('div', { class: 'stack' }, el('div', { class: 'card' }, el('div', { class: 'h-sec' }, 'Company profile'), profileBlock(c, true)), pricing), el('div', { class: 'stack' }, summaryCard('week', c.name), changesCard(5, true))),
@@ -395,10 +418,11 @@ function profileBlock(c, full) {
 /** Competitor card with a FIXED structure: every row is always present and single-line (ellipsis), the description and chip
  *  rows reserve their space, so every card has the same size no matter how much (or little) data a competitor has. */
 function compCard(c) {
-  const snap = c.snapshot, pr = snap?.profile, prods = snap ? Object.values(snap.products) : [], st = compStats(c);
-  const promo = snap?.promotions[0];
+  const snap = c.snapshot, pr = snap?.profile, st = compStats(c);
+  const promo = snap?.promotions[0], prog = c.crawling && c.progress;
   const sub = c.enabled && c.error ? el('div', { class: 'small ell', style: 'color:var(--bad)', title: c.error }, c.error)
     : !c.enabled ? el('div', { class: 'small ell', style: 'color:var(--bad)' }, 'Monitoring is off · not crawled, no credits used')
+    : c.crawling ? el('div', { class: 'small ell crawling', title: 'A crawl is running; numbers update as pages are read' }, el('span', { class: 'spin' }), 'Crawling' + (prog ? ` · ${prog.pages} pages · ${prog.products} products` : '…'))
     : el('div', { class: 'small mute ell' }, (c.site ? 'Demo site' : hostOf(c.url)) + ' · ' + (snap ? 'checked ' + ago(snap.ts) : 'baseline pending'));
   const row = (k, ...v) => el('div', { class: 'kv one' }, el('span', { class: 'k' }, k), el('span', { class: 'v2' }, ...v));
   const none = el('span', { class: 'mute' }, '—');
@@ -411,13 +435,15 @@ function compCard(c) {
       el('div', { style: 'min-width:0;flex:1' }, el('b', { class: 'ell', style: 'display:block;font-size:16px', title: c.name }, statusDot(c), c.name), sub),
       statusSwitch(c)),
     el('div', { class: c.enabled ? '' : 'dim' },
-      el('div', { class: 'cstats' }, stat(prods.length, 'Products'), stat(snap ? snap.pages.length : '–', 'Pages'), stat(snap ? snap.promotions.length : '–', 'Promos'), stat(st.week, 'Changes 7d')),
+      el('div', { class: 'cstats' }, stat(snap ? prodCount(snap) : 0, 'Products'), stat(snap ? snap.pages.length : '–', 'Pages'), stat(snap ? snap.promotions.length : '–', 'Promos'), stat(st.week, 'Changes 7d')),
       el('div', { class: 'ell', style: 'font-weight:700', title: pr?.headline || '' }, pr?.headline || (snap ? 'No profile details found' : 'Waiting for the first crawl…')),
       el('p', { class: 'desc', title: pr?.description || '' }, pr?.description || ''),
       row('Website', c.site ? 'Demo site' : el('a', { href: safeHref(c.url) || '#', target: '_blank', rel: 'noopener noreferrer' }, hostOf(c.url))),
       row('Contact', email ? el('a', { href: 'mailto:' + email }, email) : none),
       row('Social', ...(socials.length ? [...socials.slice(0, 4).map((x) => el('a', { class: 'chip', href: safeHref(x.url), target: '_blank', rel: 'noopener noreferrer' }, x.network)), socials.length > 4 && el('span', { class: 'mute' }, `+${socials.length - 4}`)] : [none])),
       row('Promotion', promo ? el('span', { title: promo }, '🏷 ' + promo) : el('span', { class: 'mute' }, 'None')),
+      feat('competitorSettings') && row('Catalog', snap ? el('span', { title: 'Products collected from this site' + (snap.estTotal ? `; the site is estimated to list about ${snap.estTotal}` : '') },
+        `${prodCount(snap).toLocaleString()} collected` + (snap.estTotal ? ` of ~${snap.estTotal.toLocaleString()}` : '') + (c.platform ? ` · ${c.platform}` : '') + (snap.inProgress ? ' · partial' : '')) : none),
       row('Tracking since', c.since ? `${fmtDate(c.since)} · ${c.snapshots} check${c.snapshots === 1 ? '' : 's'}` : none),
       row('Activity', snap ? el('span', { title: last || '' }, `${st.month} in 30 days` + (last ? ' · last: ' + last : '')) : none),
       el('div', { class: 'h-sec', style: 'margin:14px 0 6px' }, 'Key pages'),
@@ -427,8 +453,25 @@ function compCard(c) {
     el('div', { style: 'flex:1;min-height:12px' }),
     el('div', { class: 'row wrapx', style: 'margin-top:12px' },
       el('button', { class: 'btn sm primary', onclick: () => openComp(c.id) }, 'View details'),
-      el('a', { class: 'btn sm', href: pageUrl(c), target: '_blank', rel: 'noopener noreferrer' }, 'Open page ↗'),
+      feat('competitorSettings') ? btnI('settings', 'Settings', { class: 'btn sm', onclick: () => openSettings(c) })
+        : el('a', { class: 'btn sm', href: pageUrl(c), target: '_blank', rel: 'noopener noreferrer' }, 'Open page ↗'),
       el('span', { style: 'flex:1' }), el('button', { class: 'btn sm danger', onclick: () => removeComp(c) }, 'Remove')));
+}
+/** The "Add a competitor" form is built once and reused across repaints, so what you typed (and the open settings) survive a refresh. */
+let addNode = null, addFields = null;
+function addForm(full) {
+  if (addNode && addNode._full === full) return addNode;
+  addFields = feat('competitorSettings') ? settingsFields({}) : null;
+  addNode = el('form', { class: 'card', id: 'addform', style: 'margin-bottom:14px', novalidate: true, onsubmit: addComp },
+    el('div', { class: 'h-sec' }, 'Add a competitor'),
+    el('div', { class: 'grid g3' }, el('div', {}, el('label', { for: 'cn' }, 'Name'), el('input', { id: 'cn', placeholder: 'Acme Inc.' })),
+      el('div', {}, el('label', { for: 'cu' }, 'Pricing or home page URL'), el('input', { id: 'cu', placeholder: 'https://example.com/pricing', type: 'url' })),
+      el('div', { style: 'align-self:end' }, el('button', { class: 'btn primary', disabled: full }, 'Add & crawl'))),
+    addFields && el('details', { class: 'adv', style: 'margin-top:12px' }, el('summary', {}, 'Crawl settings (optional)'), addFields.node),
+    full ? el('p', { class: 'err' }, `Competitor limit reached (${S.plan.competitors}). Upgrade in Account & API to track more.`) : el('p', { class: 'small mute', style: 'margin-top:6px' }, 'Public sites only; private or internal addresses are blocked.'),
+    el('p', { class: 'err', id: 'cerr' }));
+  addNode._full = full;
+  return addNode;
 }
 function competitors() {
   const full = S.competitors.length >= S.plan.competitors;
@@ -436,15 +479,9 @@ function competitors() {
   const sum = (f) => snaps.reduce((a, x) => a + f(x), 0);
   const weekTotal = S.competitors.reduce((a, c) => a + compStats(c).week, 0);
   return [
-    el('div', { class: 'grid g4', style: 'margin-bottom:14px' }, kpi(S.competitors.length, 'Competitors tracked'), kpi(sum((x) => Object.keys(x.products).length), 'Products & prices tracked'),
+    el('div', { class: 'grid g4', style: 'margin-bottom:14px' }, kpi(S.competitors.length, 'Competitors tracked'), kpi(sum(prodCount), 'Products & prices tracked'),
       kpi(sum((x) => x.promotions.length), 'Active promotions'), kpi(weekTotal, 'Changes this week')),
-    el('form', { class: 'card', id: 'addform', style: 'margin-bottom:14px', novalidate: true, onsubmit: addComp },
-      el('div', { class: 'h-sec' }, 'Add a competitor'),
-      el('div', { class: 'grid g3' }, el('div', {}, el('label', { for: 'cn' }, 'Name'), el('input', { id: 'cn', placeholder: 'Acme Inc.' })),
-        el('div', {}, el('label', { for: 'cu' }, 'Pricing or home page URL'), el('input', { id: 'cu', placeholder: 'https://example.com/pricing', type: 'url' })),
-        el('div', { style: 'align-self:end' }, el('button', { class: 'btn primary', disabled: full }, 'Add & crawl'))),
-      full ? el('p', { class: 'err' }, `Competitor limit reached (${S.plan.competitors}). Upgrade in Account & API to track more.`) : el('p', { class: 'small mute', style: 'margin-top:6px' }, 'Public sites only; private or internal addresses are blocked.'),
-      el('p', { class: 'err', id: 'cerr' })),
+    addForm(full),
     S.competitors.length ? el('div', { class: 'cards' }, S.competitors.map(compCard)) : el('div', { class: 'card mute' }, 'No competitors yet. Add one above to start tracking.'),
   ];
 }
@@ -520,14 +557,231 @@ function account() {
         el('button', { class: 'btn sm', onclick: () => { $('keytxt').textContent = key; } }, 'Reveal'), el('button', { class: 'btn sm', onclick: () => navigator.clipboard?.writeText(key).then(() => toast('Copied')) }, 'Copy'), can('rotateKey') && el('button', { class: 'btn sm danger', onclick: rotate }, 'Rotate')),
       el('pre', {}, `curl -H "x-api-key: ${key.slice(0, 7)}…" "${base}/v1/credits/balance"\ncurl -H "x-api-key: …" "${base}/v1/web/scrape?url=https://example.com"\ncurl -X POST -H "x-api-key: …" -H "content-type: application/json" \\\n  ${base}/v1/web/crawl -d '{"url":"https://example.com","max_depth":1,"limit":5}'`))];
 }
-const VIEWS = { overview, competitors, changes, reports, digests, demo, account };
-const SUBS = { overview: () => (curComp() ? curComp().name + ' · ' : '') + (S.lastRun ? 'Last crawl ' + ago(S.lastRun) : 'Baseline crawl running…'), competitors: () => `${S.competitors.length} competitor${S.competitors.length === 1 ? '' : 's'} tracked`, changes: () => `${S.changes.length} detected in total`, reports: () => 'Weekly and monthly competitor activity', digests: () => 'AI-written summaries and actions', demo: () => 'Edit a test page, then crawl', account: () => 'Plan, billing and API access' };
+
+// ---------- products: what your competitors sell, filtered like a shop's category page ----------
+const PF0 = { competitor: '', category: '', metal: '', gem: '', stone: '', min_price: '', max_price: '', on_sale: false, in_stock: false, q: '', sort: 'relevance', offset: 0 };
+const PAGE = 50;
+let PF = { ...PF0 }, PD = null, PBUSY = false, PERR = '', PN = null, PTOKEN = 0;
+async function loadProducts() {
+  const tok = ++PTOKEN; PBUSY = true; PERR = ''; paintProducts();
+  const q = new URLSearchParams({ limit: PAGE, offset: PF.offset, sort: PF.sort });
+  for (const k of ['competitor', 'category', 'metal', 'gem', 'stone', 'min_price', 'max_price', 'q']) if (PF[k] !== '') q.set(k, PF[k]);
+  if (PF.on_sale) q.set('on_sale', 'true'); if (PF.in_stock) q.set('in_stock', 'true');
+  try { const d = await api('/api/products?' + q); if (tok !== PTOKEN) return; PD = d; } catch (e) { if (tok !== PTOKEN) return; PERR = e.message; }
+  PBUSY = false; paintProducts(); if (tab === 'products') paintShell();
+}
+const refilter = (patch) => { PF = { ...PF, offset: 0, ...patch }; loadProducts(); };
+function buildProducts() {
+  let timer;
+  const later = (fn) => { clearTimeout(timer); timer = setTimeout(fn, 300); };
+  const sel = (label, key) => el('div', {}, el('label', {}, label), el('select', { 'data-k': key, onchange: (e) => refilter({ [key]: e.target.value }) }));
+  const num = (label, key) => el('div', {}, el('label', {}, label), el('input', { type: 'number', min: 0, step: 'any', inputmode: 'decimal', 'data-k': key, placeholder: key === 'min_price' ? 'Min' : 'Max', oninput: (e) => later(() => refilter({ [key]: e.target.value })) }));
+  const sort = el('select', { 'data-k': 'sort', onchange: (e) => refilter({ sort: e.target.value }) }, [['relevance', 'Site order'], ...SORTS.slice(1)].map(([v, t]) => el('option', { value: v }, t)));
+  const seg = el('div', { class: 'seg', role: 'group', 'aria-label': 'Whose products', id: 'pseg', style: 'margin-bottom:12px' },
+    [['', 'All competitors'], ['ours', 'Our store']].map(([v, t]) => el('button', { type: 'button', 'data-v': v, onclick: () => refilter({ competitor: v }) }, t)));
+  const filters = el('div', { class: 'card', id: 'pfilters', style: 'margin-bottom:14px' }, STORE_OK && seg,
+    el('div', { class: 'fgrid3' },
+      el('div', {}, el('label', {}, 'Search'), el('input', { type: 'search', id: 'pq', placeholder: 'e.g. ring, pendant…', 'aria-label': 'Search products', oninput: (e) => later(() => refilter({ q: e.target.value.trim() })) })),
+      sel('Competitor', 'competitor'), sel('Category', 'category'), sel('Metal', 'metal'), sel('Gemstone', 'gem'), sel('Stone', 'stone'), num('Min price', 'min_price'), num('Max price', 'max_price'),
+      el('div', {}, el('label', {}, 'Sort by'), sort)),
+    el('div', { class: 'row wrapx', style: 'margin-top:12px;gap:18px' },
+      el('label', { class: 'chk' }, el('input', { type: 'checkbox', 'data-k': 'on_sale', onchange: (e) => refilter({ on_sale: e.target.checked }) }), 'On sale'),
+      el('label', { class: 'chk' }, el('input', { type: 'checkbox', 'data-k': 'in_stock', onchange: (e) => refilter({ in_stock: e.target.checked }) }), 'In stock only'),
+      el('span', { style: 'flex:1' }), el('button', { class: 'btn sm', type: 'button', onclick: () => { PF = { ...PF0 }; loadProducts(); } }, 'Clear filters')));
+  const results = el('div', { class: 'card', id: 'presults', 'aria-live': 'polite' });
+  return { root: el('div', {}, filters, results), filters, results };
+}
+function paintProducts() {
+  if (!PN) return;
+  const f = PD?.facets || {}, names = new Map(S.competitors.map((c) => [c.id, c.name]));
+  const opts = { competitor: [['', 'All competitors'], ...(STORE_OK ? [['ours', 'Our store']] : []), ...S.competitors.map((c) => [c.id, c.name])],
+    category: [['', 'All categories'], ...list(f.categories).map((x) => [x, x])], metal: [['', 'Any metal'], ...list(f.metals).map((x) => [x, x])],
+    gem: [['', 'Any gemstone'], ...list(f.gems).map((x) => [x, x])], stone: [['', 'Any stone'], ...list(f.stones).map((x) => [x, x])] };
+  for (const [k, o] of Object.entries(opts)) {
+    const s = PN.filters.querySelector(`select[data-k=${k}]`); if (!s) continue;
+    const have = [...s.options].map((x) => x.value + '\u0000' + x.text).join('\u0001'), want = o.map(([v, t]) => v + '\u0000' + t).join('\u0001');
+    if (have !== want) s.replaceChildren(...o.map(([v, t]) => el('option', { value: v }, t)));
+    s.value = PF[k]; if (s.value !== PF[k]) s.value = '';  // a facet that disappeared falls back to "any"
+  }
+  PN.filters.querySelector('select[data-k=sort]').value = PF.sort;
+  PN.filters.querySelectorAll('#pseg button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === PF.competitor || (b.dataset.v === '' && PF.competitor !== 'ours'))));
+  for (const k of ['min_price', 'max_price']) { const i = PN.filters.querySelector(`input[data-k=${k}]`); if (document.activeElement !== i) i.value = PF[k]; }
+  for (const k of ['on_sale', 'in_stock']) PN.filters.querySelector(`input[data-k=${k}]`).checked = PF[k];
+  const q = $('pq'); if (q && document.activeElement !== q) q.value = PF.q;
+  const bits = [];
+  if (PERR) bits.push(el('p', { class: 'err' }, PERR));
+  else if (!PD) bits.push(el('p', { class: 'mute' }, 'Loading products…'));
+  else {
+    const { products, total, offset, limit } = PD;
+    const from = total ? offset + 1 : 0, to = Math.min(total, offset + products.length);
+    bits.push(el('div', { class: 'row between wrapx' }, el('div', { class: 'h-sec', style: 'margin:0' }, `${total.toLocaleString()} product${total === 1 ? '' : 's'}` + (total ? ` · showing ${from}–${to}` : '')), PBUSY && el('span', { class: 'small mute' }, 'Updating…')));
+    if (!products.length) bits.push(el('p', { class: 'mute', style: 'margin-top:10px' }, S.competitors.length ? (Object.entries(PF).some(([k, v]) => k !== 'sort' && k !== 'offset' && v) ? 'No products match these filters.' : 'No products collected yet. They appear while the first crawl runs.') : 'Add a competitor to start collecting products.'));
+    else {
+      bits.push(el('div', { class: 'scroll', style: 'margin-top:8px' }, el('table', { class: 't' },
+        el('thead', {}, el('tr', {}, ['Product', 'Competitor', 'Price', 'Stock', 'Details', 'First seen'].map((h, i) => el('th', { class: i === 2 ? 'n' : '' }, h)))),
+        el('tbody', {}, products.map((p) => {
+          const href = safeHref(p.url), attrs = Object.entries(p.attributes || {}).filter(([, v]) => v != null && v !== '');
+          return el('tr', {},
+            el('td', { style: 'max-width:320px' }, href ? el('a', { href, target: '_blank', rel: 'noopener noreferrer' }, p.title) : p.title, p.category && el('div', { class: 'small mute' }, p.category)),
+            el('td', {}, p.competitor || names.get(p.competitorId) || ''),
+            el('td', { class: 'n' }, el('b', {}, p.priceLabel || '–'), p.wasPrice && el('div', { class: 'small mute' }, el('s', {}, p.wasPrice), p.discountPct != null && el('span', { class: 'tag on_sale', style: 'margin-left:6px' }, `-${p.discountPct}%`))),
+            el('td', {}, p.inStock === true ? el('span', { class: 'pill good' }, 'In stock') : p.inStock === false ? el('span', { class: 'pill bad' }, 'Out of stock') : el('span', { class: 'mute' }, '–')),
+            el('td', {}, el('div', { class: 'row wrapx', style: 'gap:4px' }, attrs.map(([k, v]) => el('span', { class: 'pill', title: k }, String(v))))),
+            el('td', { class: 'small mute' }, p.firstSeen ? ago(p.firstSeen) : ''));
+        })))));
+      if (total > limit) bits.push(el('div', { class: 'row', style: 'margin-top:12px;justify-content:flex-end' },
+        el('button', { class: 'btn sm', disabled: offset === 0 || PBUSY, onclick: () => { PF.offset = Math.max(0, offset - limit); loadProducts(); } }, '← Previous'),
+        el('button', { class: 'btn sm', disabled: offset + limit >= total || PBUSY, onclick: () => { PF.offset = offset + limit; loadProducts(); } }, 'Next →')));
+    }
+  }
+  PN.results.replaceChildren(...bits);
+}
+function products() { if (!PN) PN = buildProducts(); if (!PD && !PBUSY && !PERR) loadProducts(); else paintProducts(); return PN.root; }
+
+// ---------- our store: the workspace's own shop (Magento), read through its API and synced on a schedule ----------
+let STORE, STOREFORM = false, storeTimer = null; // STORE: undefined = not loaded yet, null = none connected
+async function loadStore() { try { STORE = (await api('/api/store')).store; } catch { /* keep what we have */ } if (STORE === undefined) STORE = null; if (tab === 'store') paintView(); }
+function store() {
+  if (STORE === undefined) { loadStore(); return el('div', { class: 'card mute' }, 'Loading…'); }
+  clearTimeout(storeTimer); if (STORE?.syncing) storeTimer = setTimeout(loadStore, 3000);
+  return STORE && !STOREFORM ? storeStatus(STORE) : storeForm(STORE);
+}
+function storeForm(s) {
+  const err = el('p', { class: 'err', role: 'alert' }), go1 = el('button', { class: 'btn primary', type: 'submit' }, s ? 'Save connection' : 'Connect & sync');
+  const url = el('input', { id: 'sUrl', type: 'url', placeholder: 'https://shop.example.com', value: s?.url || '', required: true, readonly: !!s }), code = el('input', { id: 'sCode', placeholder: 'default', value: s?.storeCode || '' });
+  const token = el('input', { id: 'sTok', type: 'password', autocomplete: 'off', placeholder: s?.hasToken ? 'A token is stored. Enter a new one to replace it.' : 'Optional' });
+  const dropTok = s?.hasToken ? el('input', { type: 'checkbox', id: 'sDrop' }) : null;
+  const cron = el('select', { id: 'sCron' }, CRONS.map(([v, t]) => el('option', { value: v, selected: (s?.cron || CRONS[0][0]) === v }, t)));
+  if (s?.cron && !CRONS.some(([v]) => v === s.cron)) cron.prepend(el('option', { value: s.cron, selected: true }, s.cron));
+  return el('form', { class: 'card', id: 'storeform', style: 'max-width:640px', novalidate: true, onsubmit: async (e) => {
+    e.preventDefault(); err.textContent = ''; go1.disabled = true;
+    const body = { cron: cron.value }; if (!s) body.url = url.value.trim();
+    if (code.value.trim() || s) body.storeCode = code.value.trim() || null;
+    if (dropTok?.checked) body.token = ''; else if (token.value) body.token = token.value;  // left out = keep the stored token
+    try { STORE = (await api('/api/store', { method: s ? 'PATCH' : 'PUT', body })).store; STOREFORM = false; toast(s ? 'Store settings saved' : 'Store connected. First sync started.'); await refresh(true); }
+    catch (x) { err.textContent = x.message; go1.disabled = false; }
+  } },
+    el('div', { class: 'h-sec' }, s ? 'Edit store connection' : 'Connect your store'),
+    el('p', { class: 'small mute', style: 'margin-bottom:12px' }, 'RivalWatch reads your own catalogue through your Magento shop’s GraphQL API (it is not crawled), so your prices can be compared with your competitors’.'),
+    el('div', { class: 'stack' },
+      el('div', {}, el('label', { for: 'sUrl' }, 'Store URL'), url, s && el('div', { class: 'fhint' }, 'To use a different store, disconnect this one first.')),
+      el('div', { class: 'fgrid' }, el('div', {}, el('label', { for: 'sCode' }, 'Store view code'), code, el('div', { class: 'fhint' }, 'Optional. Leave empty for the default store view.')),
+        el('div', {}, el('label', { for: 'sCron' }, 'Sync schedule (UTC)'), cron)),
+      el('div', {}, el('label', { for: 'sTok' }, 'Access token'), token, el('div', { class: 'fhint' }, 'Optional: the public catalogue needs none. A token is stored encrypted and never shown again.'),
+        dropTok && el('label', { class: 'chk', for: 'sDrop' }, dropTok, 'Remove the stored token')),
+      err, el('div', { class: 'row' }, go1, s && el('button', { class: 'btn', type: 'button', onclick: () => { STOREFORM = false; paintView(); } }, 'Cancel'))));
+}
+function storeStatus(s) {
+  const bad = s.status === 'error';
+  const row = (k, ...v) => el('div', { class: 'kv' }, el('span', { class: 'k' }, k), el('span', { class: 'v2' }, ...v));
+  return [el('div', { class: 'card', style: 'max-width:760px' },
+    el('div', { class: 'row between wrapx' }, el('div', {}, el('b', { style: 'font-size:17px' }, s.name || hostOf(s.url)), el('div', { class: 'small' }, el('a', { href: safeHref(s.url) || '#', target: '_blank', rel: 'noopener noreferrer' }, s.url))),
+      s.syncing ? el('span', { class: 'crawling' }, el('span', { class: 'spin' }), 'Syncing…') : s.enabled === false ? el('span', { class: 'pill' }, 'Paused') : el('span', { class: 'pill ' + (bad ? 'bad' : 'good') }, bad ? 'Error' : 'Connected')),
+    bad && s.error && el('p', { class: 'err', style: 'margin-top:10px' }, s.error),
+    el('div', { style: 'margin-top:12px' }, row('Platform', s.platform === 'magento' ? 'Magento' : s.platform || '–'), row('Products', (s.productCount ?? 0).toLocaleString() + (s.currency ? ' · ' + s.currency : '')), row('Store view', s.storeCode || 'default'),
+      row('Last sync', s.lastSync ? `${fmtTime(s.lastSync)} (${ago(s.lastSync)})` : 'Not yet', s.lastSummary && el('div', { class: 'small mute' }, s.lastSummary)), row('Next sync', s.nextSync ? fmtTime(s.nextSync) : '–'),
+      row('Schedule', (CRONS.find(([v]) => v === s.cron) || [, s.cron || '–'])[1]), row('Access token', s.hasToken ? 'Stored (encrypted)' : 'None (public catalogue)')),
+    el('div', { class: 'row wrapx', style: 'margin-top:14px' },
+      btnI('crawl', s.syncing ? 'Syncing…' : 'Sync now', { class: 'btn primary', disabled: !!s.syncing, onclick: async () => { try { await api('/api/store/sync', { method: 'POST' }); toast('Sync started'); await loadStore(); } catch (e) { toast(e.message); } } }),
+      btnI('products', 'View our products', { onclick: () => { PF = { ...PF0, competitor: 'ours' }; PD = null; go('products'); } }),
+      btnI('settings', 'Edit connection', { onclick: () => { STOREFORM = true; paintView(); } }),
+      el('button', { class: 'btn', onclick: async () => { try { STORE = (await api('/api/store', { method: 'PATCH', body: { enabled: s.enabled === false } })).store; toast(STORE.enabled === false ? 'Sync paused' : 'Sync resumed'); paintView(); } catch (e) { toast(e.message); } } }, s.enabled === false ? 'Resume sync' : 'Pause sync'), el('span', { style: 'flex:1' }),
+      el('button', { class: 'btn danger', onclick: async () => { if (!confirm('Disconnect your store? Its synced products and history are deleted.')) return; try { await api('/api/store', { method: 'DELETE' }); STORE = null; toast('Store disconnected'); await refresh(true); } catch (e) { toast(e.message); } } }, 'Disconnect')))];
+}
+
+const VIEWS = { overview, competitors, products, store, changes, reports, digests, demo, account };
+const SUBS = { overview: () => (curComp() ? curComp().name + ' · ' : '') + (S.lastRun ? 'Last crawl ' + ago(S.lastRun) : 'Baseline crawl running…'), competitors: () => `${S.competitors.length} competitor${S.competitors.length === 1 ? '' : 's'} tracked`, products: () => (PD ? `${PD.total.toLocaleString()} product${PD.total === 1 ? '' : 's'} match` : 'Collected from your competitors'), store: () => 'Your own catalogue, compared with your rivals', changes: () => `${S.changes.length} detected in total`, reports: () => 'Weekly and monthly competitor activity', digests: () => 'AI-written summaries and actions', demo: () => 'Edit a test page, then crawl', account: () => 'Plan, billing and API access' };
 
 // ---------- actions ----------
 async function crawlNow() { if (S.running) return; document.querySelectorAll('#sCrawl').forEach((b) => (b.disabled = true)); toast('Crawling…'); try { await api('/api/crawl', { method: 'POST' }); await refresh(true); toast('Crawl complete'); } catch (e) { toast(e.message); } }
 async function editSite(action) { try { const r = await api('/api/test/edit', { method: 'POST', body: { site: $('site').value, action } }); editMsg = 'Edited: ' + r.edited + '. Now press “Crawl now”.'; $('editmsg').textContent = editMsg; } catch (e) { toast(e.message); } }
 async function resetDemo() { editMsg = 'Reset to baseline.'; toast('Resetting…'); await api('/api/test/reset', { method: 'POST' }); summary = null; await refresh(true); toast('Demo reset'); }
-async function addComp(e) { e.preventDefault(); $('cerr').textContent = ''; try { await api('/api/competitors', { method: 'POST', body: { name: $('cn').value, url: $('cu').value } }); toast('Added. Baseline crawl started.'); await refresh(true); setTimeout(() => refresh(true), 2000); } catch (x) { $('cerr').textContent = x.message; } }
+async function addComp(e) {
+  e.preventDefault(); $('cerr').textContent = '';
+  try {
+    await api('/api/competitors', { method: 'POST', body: { name: $('cn').value, url: $('cu').value, ...(addFields ? addFields.read(true) : {}) } });
+    addNode = null; toast('Added. Baseline crawl started.'); await refresh(true); setTimeout(() => refresh(true), 2000);
+  } catch (x) { $('cerr').textContent = x.message; }
+}
+// ---- crawl settings: used by the "Add a competitor" form and the Settings dialog -------------------------------------
+const SORTS = [['relevance', 'Site order'], ['newest', 'Newest first'], ['price_asc', 'Price: low to high'], ['price_desc', 'Price: high to low'], ['discount', 'Biggest discount']];
+const CRONS = [['0 2 * * *', 'Every day at 02:00 UTC'], ['0 */12 * * *', 'Every 12 hours'], ['0 */6 * * *', 'Every 6 hours'], ['0 * * * *', 'Every hour'], ['0 2 * * 1', 'Every Monday at 02:00 UTC']];
+/** The editable crawl settings of one competitor. `read()` returns only what the person changed, in the shape PATCH/POST accept. */
+function settingsFields(c = {}, { scope = false } = {}) {
+  const cs = c.crawlSettings || {};
+  const num = (v, o) => el('input', { type: 'number', inputmode: 'decimal', value: v ?? '', ...o });
+  const f = {
+    name: el('input', { value: c.name || '', maxlength: 60, placeholder: 'Defaults to the domain' }),
+    maxProducts: num(c.maxProducts, { min: 1, max: 5000, step: 1, placeholder: '200' }), pageBudget: num(c.pageBudget, { min: 1, max: 5000, step: 1, placeholder: '400' }),
+    sort: el('select', {}, SORTS.map(([v, t]) => el('option', { value: v, selected: (c.sort || 'relevance') === v }, t))),
+    delay: num(cs.delay_sec, { min: 0.2, max: 10, step: 'any' }), limit: num(cs.time_limit_sec, { min: 60, max: 3600, step: 1 }),
+    browser: el('select', {}, [['auto', 'Automatic (render pages that need it)'], ['off', 'Never (fastest)']].map(([v, t]) => el('option', { value: v, selected: (cs.browser || 'auto') === v }, t))),
+    browserPages: num(cs.browser_pages, { min: 0, max: 200, step: 1 }), meta: el('input', { type: 'checkbox', checked: cs.product_meta !== false }),
+    ai: el('input', { type: 'checkbox', checked: cs.ai_extract !== false }), aiCap: num(cs.ai_extract_cap, { min: 0, max: 100, step: 1 }),
+  };
+  const known = CRONS.some(([v]) => v === c.cron);
+  f.cron = el('select', {}, [...CRONS, ['custom', 'Custom cron expression…']].map(([v, t]) => el('option', { value: v, selected: known ? c.cron === v : (c.cron ? v === 'custom' : v === CRONS[0][0]) }, t)));
+  f.cronCustom = el('input', { value: known ? '' : c.cron || '', placeholder: '0 2 * * *   (minute hour day month weekday, UTC)' });
+  f.cronCustom.hidden = f.cron.value !== 'custom'; f.cron.onchange = () => { f.cronCustom.hidden = f.cron.value !== 'custom'; if (!f.cronCustom.hidden) f.cronCustom.focus(); };
+  // scope: the categories from the site's own menu (known after its first crawl)
+  const chosen = new Map((c.categories || []).map((x) => [x.url, x.name])), menu = new Map();
+  const checks = el('div', { class: 'checks' }, el('span', { class: 'small mute' }, 'Loading the site’s menu…'));
+  const paintChecks = () => {
+    const all = new Map([...menu, ...chosen]);
+    checks.replaceChildren(...(all.size ? [...all].map(([url, name]) => el('label', {}, el('input', { type: 'checkbox', value: url, 'data-name': name, checked: chosen.has(url), onchange: (e) => { if (e.target.checked) chosen.set(url, name); else chosen.delete(url); } }), name))
+      : [el('span', { class: 'small mute' }, 'No menu found yet. It appears after the first crawl finishes.')]));
+  };
+  if (scope) api(`/api/competitors/${c.id}/categories`).then((r) => { (r.categories || []).forEach((x) => menu.set(x.url, x.name)); paintChecks(); }).catch(() => paintChecks());
+  const field = (label, input, hint) => el('div', {}, el('label', {}, label), input, hint && el('div', { class: 'fhint' }, hint));
+  const advanced = el('details', { class: 'adv' }, el('summary', {}, 'Advanced crawl settings'),
+    el('div', { class: 'fgrid' },
+      field('Delay between requests (s)', f.delay, '0.2 to 10. robots.txt can only make it longer.'), field('Time limit per crawl (s)', f.limit, '60 to 3600.'),
+      field('JavaScript rendering', f.browser), field('Pages to render per crawl', f.browserPages, '0 to 200.'),
+      field('AI price reading (pages)', f.aiCap, '0 to 100 pages read by AI when no price is structured.'),
+      el('div', {}, el('label', { class: 'chk' }, f.meta, 'Open product pages for meta tags'), el('label', { class: 'chk' }, f.ai, 'Let AI read prices from page text'))),
+    el('div', { class: 'fhint', style: 'margin-top:8px' }, 'Leave a number empty to use the server default.'));
+  const node = el('div', { class: 'stack' },
+    el('div', { class: 'fgrid' }, field('Products to collect', f.maxProducts, 'Up to 5000. Default 200.'), field('Page budget', f.pageBudget, 'Most pages fetched per crawl. Default 400.'),
+      field('Which products fill the limit', f.sort), field('Crawl schedule (UTC)', el('div', {}, f.cron, f.cronCustom))),
+    scope && el('div', {}, el('label', {}, 'Scope'), checks, el('div', { class: 'fhint' }, 'Tick categories to crawl only those. Leave all unticked to crawl the whole site.')),
+    advanced);
+  const val = (i) => (i.value === '' ? null : +i.value);
+  /** `initial`: send everything (new competitor); otherwise only the keys that differ from what the competitor has. */
+  function read(initial = false) {
+    const body = {};
+    const set = (k, v, was) => { if (initial ? v != null && v !== '' : String(v ?? '') !== String(was ?? '')) body[k] = v; };
+    if (scope) set('name', f.name.value.trim(), c.name);
+    set('maxProducts', val(f.maxProducts), c.maxProducts); set('pageBudget', val(f.pageBudget), c.pageBudget);
+    if (initial ? f.sort.value !== 'relevance' : f.sort.value !== (c.sort || 'relevance')) body.sort = f.sort.value;
+    const cron = f.cron.value === 'custom' ? f.cronCustom.value.trim() : f.cron.value;
+    if (initial ? cron && cron !== CRONS[0][0] : cron && cron !== c.cron) body.cron = cron;
+    if (scope) { const cats = [...chosen].map(([url, name]) => ({ name, url })); if (JSON.stringify(cats) !== JSON.stringify(c.categories || [])) body.categories = cats; }
+    const was = (k) => cs[k], cset = {};
+    const cnum = (k, i) => { const v = val(i); if (initial ? v != null : v !== (was(k) ?? null)) cset[k] = v; };
+    cnum('delay_sec', f.delay); cnum('time_limit_sec', f.limit); cnum('browser_pages', f.browserPages); cnum('ai_extract_cap', f.aiCap);
+    if (f.browser.value !== (cs.browser || 'auto')) cset.browser = f.browser.value;
+    if (f.meta.checked !== (cs.product_meta !== false)) cset.product_meta = f.meta.checked;
+    if (f.ai.checked !== (cs.ai_extract !== false)) cset.ai_extract = f.ai.checked;
+    if (Object.keys(cset).length) body.crawlSettings = cset;
+    return body;
+  }
+  return { node, read, f };
+}
+function openSettings(c) {
+  const form = settingsFields(c, { scope: true });
+  const err = el('p', { class: 'err', role: 'alert' }), save = el('button', { class: 'btn primary', type: 'submit' }, 'Save');
+  const dlg = el('dialog', { class: 'modal', 'aria-labelledby': 'sdTitle' }, el('form', { method: 'dialog', novalidate: true, onsubmit: async (e) => {
+    e.preventDefault(); err.textContent = '';
+    const body = form.read(); if (!Object.keys(body).length) return dlg.close();
+    save.disabled = true;
+    try { await api('/api/competitors/' + c.id, { method: 'PATCH', body }); dlg.close(); toast('Settings saved'); await refresh(true); }
+    catch (x) { err.textContent = x.message; save.disabled = false; }
+  } },
+    el('div', { class: 'mh' }, el('div', {}, el('b', { id: 'sdTitle', style: 'font-size:16px' }, 'Settings: '), el('b', { style: 'font-size:16px' }, c.name), el('div', { class: 'small mute' }, c.url)), el('button', { class: 'iconbtn', type: 'button', 'aria-label': 'Close', onclick: () => dlg.close() }, '✕')),
+    el('div', { class: 'mb' }, el('div', {}, el('label', {}, 'Name'), form.f.name), form.node, err),
+    el('div', { class: 'mf' }, el('span', { class: 'small mute', style: 'margin-right:auto' }, 'Saved changes apply from the next crawl.'), el('button', { class: 'btn', type: 'button', onclick: () => dlg.close() }, 'Cancel'), save)));
+  dlg.addEventListener('close', () => dlg.remove()); document.body.append(dlg); dlg.showModal();
+}
 async function removeComp(c) { if (!confirm(`Stop monitoring ${c.name}?`)) return; await api('/api/competitors/' + c.id, { method: 'DELETE' }); await refresh(true); }
 async function changePlan(p) { await api('/api/me/plan', { method: 'POST', body: { plan: p.id } }); toast('Switched to ' + p.name); await refresh(true); }
 async function rotate() { if (!confirm('Rotate the API key? The old key stops working.')) return; await api('/api/me/rotate-key', { method: 'POST' }); await refresh(true); toast('New key issued'); }
@@ -538,12 +792,12 @@ function exportCsv(r) {
   const a = el('a', { href: URL.createObjectURL(new Blob([rows.map((x) => x.map(safe).join(',')).join('\n')], { type: 'text/csv' })), download: `rivalwatch-${r.period}ly-${r.to}.csv` });
   document.body.append(a); a.click(); a.remove(); toast('CSV downloaded');
 }
-const go = (t) => { if (t === 'demo' && !can('demo')) t = 'overview'; tab = t; location.hash = t; document.body.classList.remove('open'); paintShell(); paintView(); window.scrollTo(0, 0); };
+const go = (t) => { if (!allowed(t)) t = 'overview'; tab = t; location.hash = t; document.body.classList.remove('open'); paintShell(); paintView(); window.scrollTo(0, 0); };
 
 // ---------- shell ----------
 function renderNav() { // the Live demo tab only exists when demo competitors are enabled (real accounts see real data only)
   $('nav').replaceChildren(...NAV.map(([group, items]) => el('div', { class: 'navgroup' }, el('h3', {}, group),
-    items.filter(([k]) => k !== 'demo' || can('demo')).map(([k, label]) => el('button', { class: 'nav', 'data-k': k, onclick: () => go(k) }, icon(k), label, k === 'changes' && el('span', { class: 'cnt pill', id: 'cnt' }))))));
+    items.filter(([k]) => (k !== 'demo' || can('demo')) && (k !== 'products' || feat('products')) && (k !== 'store' || (feat('store') && STORE_OK))).map(([k, label]) => el('button', { class: 'nav', 'data-k': k, onclick: () => go(k) }, icon(k), label, k === 'changes' && el('span', { class: 'cnt pill', id: 'cnt' }))))));
   document.querySelectorAll('.nav').forEach((b) => b.toggleAttribute('aria-current', false) || (b.dataset.k === tab && b.setAttribute('aria-current', 'page')));
 }
 function buildNav() {
@@ -567,16 +821,16 @@ function paintShell() {
   $('user').replaceChildren(el('div', { class: 'av' }, ME.name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase()),
     el('div', { class: 'meta' }, el('b', {}, ME.name), el('span', { class: 'small mute' }, ME.email)), el('button', { class: 'iconbtn', 'aria-label': 'Sign out', title: 'Sign out', onclick: logout }, icon('logout')));
 }
-function paintView() { hideTip(); $('view').replaceChildren(...[VIEWS[tab]()].flat(Infinity).filter(Boolean)); paintShell(); }
+function paintView() { if (!S) return; hideTip(); $('view').replaceChildren(...[VIEWS[tab]()].flat(Infinity).filter(Boolean)); paintShell(); }
 async function refresh(force) {
-  S = await api('/api/state');
+  S = await api('/api/state'); S.competitors.forEach(normalise); if ('store' in S) STORE = S.store;
   if (selComp && !S.competitors.some((c) => c.id === selComp)) selComp = '';
   const q = '&competitor=' + encodeURIComponent(selComp);
   [ME, R.week, R.month] = await Promise.all([api('/api/me'), api('/api/reports?period=week' + q), api('/api/reports?period=month' + q)]);
-  const next = [selComp, S.runs, S.running, S.changes.length, S.competitors.length, S.credits, S.digest?.ts, ME.plan, S.competitors.map((c) => c.snapshots + (c.error || '') + c.enabled).join()].join('|');
-  const typing = ['cn', 'cu', 'site', 'fType', 'fComp', 'fComp2'].includes(document.activeElement?.id);
+  const next = [selComp, S.runs, S.running, S.changes.length, S.competitors.length, S.credits, S.digest?.ts, ME.plan, S.competitors.map((c) => [c.snapshots, c.error || '', c.enabled, c.crawling, c.progress?.pages, c.progress?.products, c.snapshot?.productCount, c.status].join(':')).join()].join('|');
+  const typing = ['cn', 'cu', 'site', 'fType', 'fComp', 'fComp2'].includes(document.activeElement?.id) || !!document.activeElement?.closest?.('#addform, #pfilters, #storeform');
   paintShell();
-  if (force || (next !== sig && !typing)) { sig = next; paintView(); }
+  if (force || (next !== sig && !typing)) { if (next !== sig && tab === 'products') PD = null; sig = next; paintView(); }
 }
 function tickTimer() {
   if (!S) return;
@@ -587,10 +841,16 @@ function tickTimer() {
 }
 setInterval(tickTimer, 1000);
 const setOffline = (v) => { $('offline').hidden = !v; };
-setInterval(() => { if (!document.hidden) refresh().then(() => setOffline(false)).catch(() => setOffline(true)); }, 5000);
+let polledAt = 0;
+setInterval(() => { if (document.hidden || (!S?.running && Date.now() - polledAt < 5000)) return; polledAt = Date.now(); refresh().then(() => setOffline(false)).catch(() => setOffline(true)); }, 2000); // every 2 s while a crawl runs, otherwise every 5 s
 window.addEventListener('hashchange', () => { const t = location.hash.slice(1); if (TITLES[t] && t !== tab) go(t); });
 buildNav(); paintShell();
-api('/api/plans', { noRedirect: true }).then((d) => { d.plans.forEach((p) => PLANS[p.id] = p); CAPS = d.backend || {}; if (tab === 'demo' && !can('demo')) tab = 'overview'; renderNav(); return refresh(true); });
+api('/api/plans', { noRedirect: true }).then(async (d) => {
+  d.plans.forEach((p) => PLANS[p.id] = p); CAPS = d.backend || {};
+  if (feat('store')) STORE_OK = await api('/api/store').then(() => true, () => false); // a backend without the store feature answers 404
+  if (!allowed(tab)) tab = 'overview';
+  renderNav(); return refresh(true);
+});
 </script>
 </body>
 </html>

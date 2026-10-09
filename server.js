@@ -8,6 +8,7 @@ import { Workspaces } from './lib/workspace.js';
 import * as testsite from './lib/testsite.js';
 import { buildReport } from './lib/reports.js';
 import { makeDigest } from './lib/digest.js';
+import { forward, readBody, ModeProbe } from './lib/passthrough.js';
 import { Backend, BackendError, BackendIdentity, RemoteCrawler, RoutingCrawler, credentialProblem, toAdminRow } from './lib/backend.js';
 
 const PORT = +process.env.PORT || 3000;
@@ -20,6 +21,9 @@ const PUBLIC = path.resolve('public');
 // BACKEND_URL switches on the Python backend integration (see docs/integration/). Unset = standalone demo.
 const BACKEND = process.env.BACKEND_URL ? new Backend(process.env.BACKEND_URL) : null;
 const identity = BACKEND ? new BackendIdentity(BACKEND) : null;
+// A backend that serves /api/* itself (`backend.enabled` on GET /api/plans) is used in native mode: static pages here,
+// everything else forwarded. Older backends (only /user, /admin, /v1) keep working through the adapter below.
+const probe = new ModeProbe(BACKEND, process.env.BACKEND_MODE || 'auto');
 // Demo competitors (editable test sites) are on by default standalone, off for real backend accounts.
 // DEMO_DATA=1 opts in to fabricated data (pre-loaded report history, sample customers). Default: real data only.
 const DEMO_DATA = process.env.DEMO_DATA === '1';
@@ -87,33 +91,52 @@ const UNAVAILABLE_PAGE = `<!doctype html><html lang="en"><head><meta charset="ut
 <style>body{font:16px/1.5 system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;margin:0;background:#f7f8fa;color:#14171f}main{max-width:420px;padding:24px;text-align:center}h1{font-size:22px}p{color:#657085}a{color:#4f46e5;font-weight:600}@media(prefers-color-scheme:dark){body{background:#0e1015;color:#eef0f4}p{color:#9aa4b5}a{color:#8b87ff}}</style></head>
 <body><main><h1>We can't reach the service right now</h1><p>This page will retry automatically. If it keeps happening, try again in a few minutes.</p><p><a href="">Try again now</a> · <a href="/">Home</a></p></main></body></html>`;
 
+/** At startup, give a backend that is still booting a few seconds before reporting which mode this server is in. */
+async function waitForMode() { for (let i = 0; i < 15 && !(await probe.isNative()) && !probe.answered; i++) await new Promise((r) => setTimeout(r, 1000)); return probe.isNative(); }
+
 // ---- routes ---------------------------------------------------------------------
+/** Serves a static file. Only /app and /admin need to know who is asking; public pages never touch the backend. */
+async function servePage(req, res, p, whoami) {
+  let user;
+  if (p === '/app' || p === '/admin') {
+    try { user = await whoami(req); }
+    catch (e) { if (e instanceof BackendError) return send(res, 503, UNAVAILABLE_PAGE, 'text/html; charset=utf-8', { 'retry-after': '5' }); throw e; } // backend down: a friendly page, not raw JSON
+  }
+  if (p === '/app' && !user) return redirect(res, '/login');
+  if (p === '/admin' && user?.role !== 'admin') return redirect(res, user ? '/app' : '/login');
+  const f = PAGES[p];
+  return send(res, 200, fs.readFileSync(path.join(PUBLIC, f), 'utf8'), TYPES[path.extname(f)]);
+}
+/** The signed-in user according to a native backend (GET /api/session with the browser's cookie). */
+async function nativeUser(req) {
+  const r = await BACKEND.json('GET', '/api/session', { headers: { cookie: req.headers.cookie || '' } });
+  if (r.status >= 500) throw new BackendError(503, 'The backend is unavailable. Try again shortly.');
+  return r.data?.user ?? null;
+}
+
 http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   const p = url.pathname;
   const M = req.method;
   try {
-    // pages
-    if (M === 'GET' && PAGES[p]) {
-      let user;
-      if (p === '/app' || p === '/admin') { // only these need to know who you are; public pages never touch the backend
-        try { user = await currentUser(req); }
-        catch (e) { if (e instanceof BackendError) return send(res, 503, UNAVAILABLE_PAGE, 'text/html; charset=utf-8', { 'retry-after': '5' }); throw e; } // backend down: a friendly page, not raw JSON
+    // native mode: the backend owns /api/* and /v1/*; this server only serves the pages
+    if (await probe.isNative()) {
+      if (M === 'GET' && PAGES[p]) return servePage(req, res, p, nativeUser);
+      if (p === '/favicon.ico') { res.writeHead(204, HEADERS); return res.end(); }
+      if (p.startsWith('/api/') || p.startsWith('/v1/')) {
+        try { return await forward(BACKEND, req, res, url, HEADERS); }
+        catch (e) { if (p === '/api/session' && e instanceof BackendError && e.status >= 500) return send(res, 200, { user: null }); throw e; } // public pages keep working in an outage
       }
-      if (p === '/app' && !user) return redirect(res, '/login');
-      if (p === '/admin' && user?.role !== 'admin') return redirect(res, user ? '/app' : '/login');
-      const f = PAGES[p];
-      return send(res, 200, fs.readFileSync(path.join(PUBLIC, f), 'utf8'), TYPES[path.extname(f)]);
+      return send(res, 404, 'not found', 'text/plain');
     }
 
+    // pages
+    if (M === 'GET' && PAGES[p]) return servePage(req, res, p, currentUser);
     if (p === '/favicon.ico') { res.writeHead(204, HEADERS); return res.end(); }
 
     // crawl API
     if (BACKEND && p.startsWith('/v1/')) { // the backend owns the public crawl API (keys, credits, robots.txt, SSRF checks)
-      const body = M === 'GET' || M === 'HEAD' ? undefined : await new Promise((ok, no) => { // capped at 1 MB so the proxy can't be used to exhaust memory
-        const c = []; let n = 0;
-        req.on('data', (d) => { n += d.length; if (n > 1e6) { req.destroy(); no(new BackendError(413, 'Request body too large')); } else c.push(d); });
-        req.on('end', () => ok(Buffer.concat(c))); req.on('error', no); });
+      const body = M === 'GET' || M === 'HEAD' ? undefined : await readBody(req);
       const r = await BACKEND.raw(M, p + url.search, { apiKey: req.headers['x-api-key'], body: body?.length ? body : undefined, headers: req.headers['content-type'] ? { 'content-type': req.headers['content-type'] } : {} });
       res.writeHead(r.status, { ...HEADERS, 'content-type': r.type || 'application/json', 'cache-control': 'no-store' });
       return res.end(r.buf);
@@ -143,7 +166,7 @@ http.createServer(async (req, res) => {
       const pair = (v) => { const [email, ...pw] = String(v || '').split(':'); return email && pw.length ? { email, password: pw.join(':') } : null; };
       if (BACKEND) return send(res, 200, { plans: Object.values(PLANS), annualDiscount: ANNUAL_DISCOUNT, demo: { user: pair(process.env.DEMO_USER), admin: pair(process.env.DEMO_ADMIN) },
         // what the backend can't do yet; the UI hides or disables these instead of failing
-        backend: { enabled: true, demo: DEMO_COMPETITORS, signupName: false, planChanges: false, rotateKey: false, adminPlanEdit: false, adminRoleEdit: false, adminResetCredits: false, adminResetPassword: false } });
+        backend: { enabled: true, demo: DEMO_COMPETITORS, signupName: false, planChanges: false, rotateKey: false, adminPlanEdit: false, adminRoleEdit: false, adminResetCredits: false, adminResetPassword: false, competitorSettings: false, products: false, store: false, adminStore: false } });
       return send(res, 200, { plans: Object.values(PLANS), annualDiscount: ANNUAL_DISCOUNT,
         demo: { user: users.byEmail('demo@rivalwatch.dev') ? { email: 'demo@rivalwatch.dev', password: DEMO_PW } : null,
           admin: !process.env.ADMIN_PASSWORD ? { email: 'admin@rivalwatch.dev', password: ADMIN_PW } : null } });
@@ -389,6 +412,6 @@ http.createServer(async (req, res) => {
   }
 }).listen(PORT, HOST, () => {
   console.log(`RivalWatch on http://${HOST === '127.0.0.1' ? 'localhost' : HOST}:${PORT}  (digest: ${process.env.ANTHROPIC_API_KEY ? 'Claude' : 'rule-based'}, crawl every ${INTERVAL / 1000}s)`);
-  if (BACKEND) console.log(`Backend: ${process.env.BACKEND_URL}  (accounts, sessions, admin users and the /v1 crawl API; demo competitors ${DEMO_COMPETITORS ? 'on' : 'off'})`);
+  if (BACKEND) waitForMode().then((n) => console.log(n ? `Backend: ${process.env.BACKEND_URL}  (native mode: it serves /api/* and /v1/*; this server hands out the pages)` : `Backend: ${process.env.BACKEND_URL}  (adapter mode: /user, /admin and /v1 only; demo competitors ${DEMO_COMPETITORS ? 'on' : 'off'})`));
   else console.log(`Demo logins: demo@rivalwatch.dev / ${DEMO_PW}   admin@rivalwatch.dev / ${process.env.ADMIN_PASSWORD ? '(ADMIN_PASSWORD)' : ADMIN_PW}`);
 });

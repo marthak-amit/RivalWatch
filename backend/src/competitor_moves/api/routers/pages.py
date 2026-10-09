@@ -11,7 +11,7 @@ from .ui import session_user
 
 router = APIRouter(include_in_schema=False)
 PAGES = {"/": "index.html", "/login": "login.html", "/app": "app.html", "/admin": "admin.html",
-         "/style.css": "style.css", "/common.js": "common.js"}
+         "/style.css": "style.css", "/common.js": "common.js", "/theme.js": "theme.js"}
 HEADERS = {
     "x-content-type-options": "nosniff", "x-frame-options": "DENY", "referrer-policy": "same-origin",
     "content-security-policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "

@@ -44,6 +44,20 @@ def test_login_errors_json_only_and_rate_limit(client):
     assert client.post("/api/auth/login", json={"email": "ui@test.local", "password": "password123"}).status_code == 429
 
 
+def test_successful_logins_do_not_count_towards_the_rate_limit(client):
+    signup(client)
+    for _ in range(12):
+        r = client.post("/api/auth/login", json={"email": "ui@test.local", "password": "password123"})
+        assert r.status_code == 200, r.text
+
+
+def test_control_characters_in_credentials_are_rejected_not_a_500(client):
+    for path in ("/api/auth/login", "/api/auth/signup"):
+        for body in ({"email": "a\u0000@test.local", "password": "password123"}, {"email": "a@test.local", "password": "pass\u0000word1"}):
+            r = client.post(path, json=body)
+            assert r.status_code == 400 and "invalid characters" in r.json()["error"], (path, r.status_code, r.text)
+
+
 def test_pages_redirect_like_the_original_server(client):
     assert client.get("/", follow_redirects=False).status_code == 200
     r = client.get("/app", follow_redirects=False)

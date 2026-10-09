@@ -10,7 +10,7 @@ from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from pydantic import BaseModel, Field, StrictBool
+from pydantic import BaseModel, Field, StrictBool, field_validator
 
 from ...config import get_settings
 from ...core.plans import ANNUAL_DISCOUNT, PLANS
@@ -49,6 +49,9 @@ class Limiter:
         now = time.monotonic()
         self.hits[key] = [t for t in self.hits[key] if now - t < self.window] + [now]
         return len(self.hits[key]) <= self.max
+
+    def reset(self, key: str) -> None:
+        self.hits.pop(key, None)
 
 
 limiter = Limiter()
@@ -101,6 +104,14 @@ class LoginBody(BaseModel):
     email: str = Field("", max_length=254)
     password: str = Field("", max_length=128)
 
+    @field_validator("email", "password")
+    @classmethod
+    def _no_control_chars(cls, v: str) -> str:
+        # a NUL byte makes Postgres raise a DataError (a 500); other control characters are never legitimate here
+        if re.search(r"[\x00-\x1f\x7f]", v):
+            raise ValueError("contains invalid characters")
+        return v
+
 
 class SignupBody(LoginBody):
     name: str | None = Field(None, max_length=120)
@@ -122,8 +133,12 @@ def plans():
                         "adminPlanEdit": True, "adminRoleEdit": False, "adminResetCredits": True, "adminResetPassword": True}}
 
 
+def _rate_key(request: Request, email: str) -> str:
+    return f"{request.client.host if request.client else '?'}|{email.strip().lower()}"
+
+
 def _check_rate(request: Request, email: str) -> None:
-    if not limiter.hit(f"{request.client.host if request.client else '?'}|{email.strip().lower()}"):
+    if not limiter.hit(_rate_key(request, email)):
         raise UiError(429, "Too many attempts. Try again in a few minutes.")
 
 
@@ -142,6 +157,7 @@ def login(body: LoginBody, request: Request, response: Response, conn=Depends(ge
         raise UiError(401, "Incorrect email or password")
     if not row["is_active"]:
         raise UiError(403, "This account is suspended. Contact support.")
+    limiter.reset(_rate_key(request, body.email))  # only failures count towards the limit
     return _signed_in(conn, request, response, row)
 
 

@@ -41,13 +41,23 @@ Light and dark mode: every page has a sun/moon button. By default the site follo
 
 ## Running with the Python backend
 
-`BACKEND_URL=http://localhost:8000 npm start` puts this server in front of the Python backend in `backend/`: login, signup,
-sessions, the admin user list and the public `/v1` crawl API then come from the backend (real Postgres accounts, credits and API keys),
-and competitor sites are crawled by the backend's worker (credits, robots.txt, SSRF protection). The monitoring pipeline
-(snapshots, changes, digests, reports) still runs here until the backend has those endpoints. Real accounts start with an empty
-workspace and only real data (no Live demo tab; `DEMO_COMPETITORS=1` brings the editable test sites back). Full details, route mapping and the list of what the
-backend still needs: [docs/integration/backend-integration.md](docs/integration/backend-integration.md). End-to-end check:
-`npm run test:integration` ([integration/README.md](integration/README.md)).
+The Python backend in `backend/` serves this UI's own `/api/*` contract (and the pages) from Postgres, with real product crawling,
+per-website change history, competitor settings, product search and an optional connection to your own Magento store. There are two ways to use it:
+
+* **Direct (simplest):** `cd backend && docker compose up -d --build`, then open http://localhost:8031 (the backend serves `public/` itself). Swagger: `/docs`.
+* **Through this Node server:** `BACKEND_URL=http://localhost:8031 npm start` (or `:8000` for a local run). The server asks the backend `GET /api/plans`; when it
+  answers `backend.enabled` it runs in **native mode**: it only hands out the pages and forwards `/api/*` and `/v1/*` unchanged (cookies and client IP included).
+  Against an older backend that only has `/user`, `/admin` and `/v1`, it falls back to the **adapter** (accounts and crawl API from the backend, monitoring pipeline in Node).
+  Force one with `BACKEND_MODE=native|bff`; the startup log says which is active.
+
+With a native backend the dashboard adds a **Products** page (filters from the backend's facets: category, metal, gemstone, stone, price range, on sale, in stock, search,
+sort), per-competitor **Settings** (product limit, page budget, scope by menu category, sort, schedule, advanced crawl settings), live crawl progress and
+"collected X of ~Y" on each card, the new change types (on sale, out of stock, new category, product updated, homepage changed) and, once the backend has `/api/store`, an
+**Our store** page and a Store button per customer in the admin panel. Standalone and adapter modes hide what they can't do.
+Real accounts start with an empty workspace and only real data (no Live demo tab).
+
+Full details, route mapping and what the backend still needs: [docs/integration/backend-integration.md](docs/integration/backend-integration.md).
+End-to-end checks: `npm run test:native` (native), `npm run test:integration` (adapter), `npm run test:auth` ([integration/README.md](integration/README.md)).
 
 ## SocialCrawl-style crawl API (per-user key, shown in Account & API)
 
@@ -69,6 +79,7 @@ curl -H "$K" localhost:3000/v1/web/crawl/<job_id>                            # p
 
 | Var | Meaning |
 |---|---|
+| `BACKEND_URL`, `BACKEND_MODE` | backend base URL; `auto` (default) detects native vs adapter, or force `native` / `bff` |
 | `DEMO_DATA` | `1` opts in to fabricated data (sample report history, fake admin customers). Off by default: only real data is shown |
 | `ANTHROPIC_API_KEY` | Claude writes the digest (`DIGEST_MODEL`, default `claude-sonnet-5-5`); otherwise a rule-based digest is used |
 | `CRAWL_INTERVAL_SEC`, `PORT`, `HOST`, `ADMIN_PASSWORD`, `DATA_DIR` | scheduler interval (default 300), port, bind address, admin password, where `users.json` is stored |

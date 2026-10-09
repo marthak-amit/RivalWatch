@@ -8,7 +8,8 @@
     "test": "node --test",
     "dev": "node --watch server.js",
     "test:integration": "node integration/backend.integration.mjs",
-    "test:auth": "node integration/auth.integration.mjs"
+    "test:auth": "node integration/auth.integration.mjs",
+    "test:native": "node integration/native.integration.mjs"
   },
   "engines": {
     "node": ">=20"

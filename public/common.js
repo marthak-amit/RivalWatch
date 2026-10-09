@@ -12,7 +12,7 @@ async function api(path, { method = 'GET', body, noRedirect } = {}) {
   const res = await fetch(path, { method, credentials: 'same-origin', headers: body ? { 'content-type': 'application/json' } : method === 'GET' ? {} : { 'content-type': 'application/json' }, body: method === 'GET' ? undefined : JSON.stringify(body || {}) });
   const data = await res.json().catch(() => ({}));
   if (res.status === 401 && !noRedirect) { location.href = '/login'; throw new Error('Not signed in'); }
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  if (!res.ok) throw Object.assign(new Error(data.error || `Request failed (${res.status})`), { status: res.status });
   return data;
 }
 let toastTimer;
