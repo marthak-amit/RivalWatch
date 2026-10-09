@@ -28,3 +28,18 @@ test('rule-based digest gives 3-5 actions', async () => {
   const d = await makeDigest([{ type: 'new_page', path: '/x', competitor: 'Acme' }]);
   assert.ok(d.actions.length >= 3 && d.actions.length <= 5);
 });
+
+import { buildProfile } from '../lib/profile.js';
+test('profile extracts headline, description, positioning, socials, email and page titles', () => {
+  const pages = [
+    { url: 'http://x.test/a/', title: 'Home | Acme', description: 'Acme helps teams ship faster.', links: ['http://x.test/a/pricing', 'https://x.com/acme', 'https://www.linkedin.com/company/acme', 'https://x.com/'],
+      markdown: '# Ship faster\n\nAcme helps teams ship faster.\n\n## Built for speed\n\n## Loved by teams\n\nContact [hi@acme.test](mailto:hi@acme.test)' },
+    { url: 'http://x.test/a/pricing', title: 'Pricing | Acme', links: [], markdown: '# Pricing' },
+  ];
+  const p = buildProfile(pages, '/a');
+  assert.equal(p.headline, 'Ship faster'); assert.equal(p.description, 'Acme helps teams ship faster.');
+  assert.deepEqual(p.positioning.slice(0, 2), ['Built for speed', 'Loved by teams']);
+  assert.deepEqual(p.socials.map((s) => s.network), ['X', 'LinkedIn']); // bare x.com/ homepage link is not a profile
+  assert.deepEqual(p.emails, ['hi@acme.test']);
+  assert.deepEqual(p.keyPages.map((k) => k.path + ':' + k.title), ['/:Home', '/pricing:Pricing']);
+});
