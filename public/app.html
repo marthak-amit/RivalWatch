@@ -11,7 +11,7 @@
   @media (prefers-color-scheme: dark) { :root { --s1:#3987e5; --s2:#d95926; --side:#12141a; --side-hover:#1d2029; } }
 
   .shell { display:grid; grid-template-columns:260px 1fr; min-height:100vh; }
-  .sidebar { background:var(--side); border-right:1px solid var(--line); position:sticky; top:0; height:100vh; display:flex; flex-direction:column; padding:16px 12px; gap:14px; overflow-y:auto; }
+  .sidebar { background:var(--side); border-right:1px solid var(--line); position:sticky; top:0; height:100vh; height:100dvh; display:flex; flex-direction:column; padding:16px 12px; gap:14px; overflow:hidden; }
   .sidebar .logo { padding:2px 8px; }
   .sidebar .qa { display:grid; gap:8px; padding:0 4px; }
   .sidebar .qa .btn { width:100%; justify-content:flex-start; }
@@ -21,7 +21,18 @@
   .nav:hover { background:var(--side-hover); color:var(--ink); }
   .nav[aria-current=page] { background:var(--acc-soft); color:var(--acc); }
   .nav .cnt { margin-left:auto; font-size:12px; }
-  .sidebar .grow { flex:1; }
+  .sidebar .grow { flex:1; min-height:0; }
+  #nav { min-height:0; }
+  /* Fit the whole sidebar in the viewport at any height: compact in steps instead of scrolling */
+  @media (max-height:860px) {
+    .sidebar { padding:12px 10px; gap:8px; } .sidebar .qa { gap:6px; } .sidebar .qa .btn { padding:6px 12px; }
+    .navgroup { gap:0; } .navgroup h3 { margin:4px 10px 2px; } #nav { gap:6px !important; }
+    .nav { padding:6px 10px; } .plancard { padding:8px 10px; } .plancard .row { margin-bottom:2px; } .usercard .av { width:30px; height:30px; }
+  }
+  @media (max-height:720px) { #sReport { display:none; } .nav { padding:5px 10px; } .sidebar .next { margin-top:-4px; } }
+  @media (max-height:600px) { .navgroup h3, .plancard .bar2, .sidebar .next { display:none; } .logo { font-size:16px; } .sidebar { gap:6px; } }
+  @media (max-height:500px) { .plancard { display:none; } .sidebar .qa .btn { padding:4px 10px; } .nav { padding:4px 10px; } }
+  @media (max-height:420px) { .sidebar { overflow-y:auto; } } /* last resort on tiny windows */
   .plancard { border:1px solid var(--line); border-radius:12px; padding:12px; } .plancard .row { margin-bottom:6px; }
   .usercard { display:flex; align-items:center; gap:10px; padding:4px; } .usercard .meta { min-width:0; flex:1; } .usercard .meta b, .usercard .meta span { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .av { width:34px; height:34px; border-radius:50%; background:var(--acc-soft); color:var(--acc); display:grid; place-items:center; font-weight:800; flex:none; }
