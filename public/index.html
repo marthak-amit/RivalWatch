@@ -3,120 +3,137 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>RivalWatch</title>
+<title>RivalWatch: AI competitor intelligence</title>
+<meta name="description" content="Track competitor prices, products, promotions and new pages. Get an AI digest with suggested actions.">
+<link rel="stylesheet" href="/style.css">
 <style>
-  :root { --bg:#f6f7f9; --card:#fff; --ink:#16181d; --mute:#667085; --line:#e4e7ec; --acc:#4f46e5; --good:#12b76a; --bad:#f04438; --warn:#f79009; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#0f1115; --card:#181b21; --ink:#eef0f4; --mute:#98a2b3; --line:#2a2f38; --acc:#8b87ff; } }
-  * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui,sans-serif; }
-  main { max-width:1100px; margin:0 auto; padding:20px 16px 60px; }
-  header { display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between; margin-bottom:16px; }
-  h1 { margin:0; font-size:22px; } h1 small { color:var(--mute); font-weight:400; font-size:14px; margin-left:8px; }
-  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--mute); margin:0 0 10px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; }
-  .grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); margin-bottom:16px; }
-  .two { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); }
-  button { font:inherit; border:1px solid var(--line); background:var(--card); color:var(--ink); padding:6px 12px; border-radius:7px; cursor:pointer; }
-  button:hover { border-color:var(--acc); } button.primary { background:var(--acc); color:#fff; border-color:var(--acc); }
-  button:disabled { opacity:.5; cursor:wait; }
-  select { font:inherit; padding:6px; border-radius:7px; border:1px solid var(--line); background:var(--card); color:var(--ink); }
-  .meta { color:var(--mute); font-size:13px; } .pill { display:inline-block; padding:1px 8px; border-radius:99px; font-size:12px; background:var(--line); }
-  ul { list-style:none; margin:6px 0 0; padding:0; } li { padding:6px 0; border-top:1px solid var(--line); } li:first-child { border-top:0; }
-  .row { display:flex; justify-content:space-between; gap:8px; }
-  .price { font-variant-numeric:tabular-nums; }
-  .tag { font-size:11px; font-weight:600; padding:1px 7px; border-radius:5px; margin-right:6px; }
-  .price_change { background:#fef0c7; color:#93370d; } .product_added,.product_removed { background:#e0eaff; color:#2d31a6; }
-  .new_promo,.promo_ended { background:#fce7f6; color:#9f1a77; } .new_page,.page_removed { background:#d1fadf; color:#05603a; }
-  .hi { color:var(--bad); } .md { color:var(--warn); } .lo { color:var(--mute); }
-  .actions { padding-left:0; counter-reset:a; } .actions li { counter-increment:a; padding-left:26px; position:relative; }
-  .actions li::before { content:counter(a); position:absolute; left:0; top:6px; width:18px; height:18px; border-radius:50%; background:var(--acc); color:#fff; font-size:11px; text-align:center; line-height:18px; }
-  .err { color:var(--bad); font-size:13px; } .bar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  nav.top { position:sticky; top:0; z-index:20; background:color-mix(in srgb,var(--bg) 88%,transparent); backdrop-filter:blur(10px); border-bottom:1px solid var(--line); }
+  nav.top .wrap { display:flex; align-items:center; justify-content:space-between; height:60px; gap:14px; }
+  nav.top .links { display:flex; gap:22px; } nav.top .links a { color:var(--mute); font-weight:600; } nav.top .links a:hover { color:var(--ink); text-decoration:none; }
+  @media (max-width:760px) { nav.top .links { display:none; } }
+  .hero { padding:64px 0 40px; } .hero .wrap { display:grid; gap:40px; grid-template-columns:1.05fr .95fr; align-items:center; }
+  @media (max-width:900px) { .hero .wrap { grid-template-columns:1fr; } }
+  .hero h1 { font-size:clamp(34px,5vw,54px); letter-spacing:-.02em; margin:14px 0; }
+  .hero h1 em { font-style:normal; background:linear-gradient(90deg,var(--acc),#06b6d4); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .hero p.lead { font-size:18px; color:var(--mute); max-width:520px; margin-bottom:24px; }
+  section { padding:56px 0; } section h2 { font-size:clamp(26px,3.4vw,34px); letter-spacing:-.01em; text-align:center; margin-bottom:8px; }
+  section .sub { text-align:center; color:var(--mute); max-width:560px; margin:0 auto 32px; }
+  .step .n { width:30px; height:30px; border-radius:50%; background:var(--acc-soft); color:var(--acc); font-weight:800; display:grid; place-items:center; margin-bottom:10px; }
+  .feat .ic { font-size:22px; margin-bottom:6px; }
+  .toggle { display:inline-flex; background:var(--line); border-radius:99px; padding:3px; margin-bottom:28px; }
+  .toggle button { font:inherit; font-weight:600; border:0; background:transparent; color:var(--mute); padding:6px 16px; border-radius:99px; cursor:pointer; }
+  .toggle button[aria-pressed=true] { background:var(--card); color:var(--ink); box-shadow:var(--shadow); }
+  .plan { display:flex; flex-direction:column; position:relative; } .plan.popular { border:2px solid var(--acc); }
+  .plan .price { font-size:40px; font-weight:800; letter-spacing:-.02em; } .plan ul { flex:1; margin:16px 0 20px; }
+  .plan li::before { content:"✓"; color:var(--good); font-weight:800; margin-right:8px; }
+  .plan .badge { position:absolute; top:-12px; left:18px; }
+  details { border-bottom:1px solid var(--line); padding:14px 0; } summary { cursor:pointer; font-weight:700; } details p { color:var(--mute); margin-top:8px; }
+  footer { border-top:1px solid var(--line); padding:28px 0; color:var(--mute); font-size:14px; }
+  #loader { position:fixed; inset:0; z-index:100; background:var(--bg); display:none; flex-direction:column; align-items:center; justify-content:center; gap:18px; text-align:center; padding:20px; }
+  #loader.show { display:flex; } #loader .bar { width:240px; height:6px; background:var(--line); border-radius:9px; overflow:hidden; } #loader .bar i { display:block; height:100%; width:0; background:var(--acc); }
+  #loader.show .bar i { animation:fill 2s linear forwards; } @keyframes fill { to { width:100%; } }
+  .mock .chg { display:flex; gap:8px; align-items:baseline; padding:7px 0; border-top:1px solid var(--line); font-size:14px; } .mock .chg:first-of-type { border-top:0; }
 </style>
 </head>
 <body>
-<main>
-  <header>
-    <h1>RivalWatch <small>AI competitor intelligence</small></h1>
-    <div class="bar">
-      <span class="pill" id="credits"></span><span class="pill" id="next"></span>
-      <button class="primary" id="crawl">Crawl now</button>
-    </div>
-  </header>
+<nav class="top"><div class="wrap">
+  <a class="logo" href="/">RivalWatch</a>
+  <div class="links"><a href="#how">How it works</a><a href="#features">Features</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a></div>
+  <div class="row"><a class="btn" id="signin" href="/login">Sign in</a><a class="btn primary" href="#pricing">Get started</a></div>
+</div></nav>
 
-  <h2>Competitors</h2>
-  <div class="grid" id="comps"></div>
-
-  <div class="card" id="demo" style="margin-bottom:16px">
-    <h2>Live demo: edit a competitor's test page</h2>
-    <div class="bar">
-      <select id="site"></select>
-      <button data-a="price_drop">Cut a price 20%</button>
-      <button data-a="price_hike">Raise top price 15%</button>
-      <button data-a="add_tier">Add new tier</button>
-      <button data-a="promo">Launch promotion</button>
-      <button data-a="new_page">Publish new page</button>
-      <button id="reset">Reset</button>
-    </div>
-    <p class="meta" style="margin:8px 0 0" id="editmsg">Edit a page, then press “Crawl now” to see the change detected and summarised.</p>
+<header class="hero"><div class="wrap">
+  <div>
+    <span class="pill acc">AI competitor intelligence</span>
+    <h1>Know what your rivals changed <em>before your customers do.</em></h1>
+    <p class="lead">RivalWatch crawls competitor sites on a schedule, spots price, product, promotion and new-page changes, and an AI analyst tells you what to do about it.</p>
+    <div class="row wrapx"><a class="btn primary lg" href="#pricing">See plans</a><a class="btn lg" href="/login?demo=1">Try the live demo</a></div>
+    <p class="small mute" style="margin-top:12px">No credit card needed for the demo. Edit a test competitor page and watch detection happen.</p>
   </div>
-
-  <div class="two">
-    <div class="card"><h2>AI digest <span class="meta" id="src"></span></h2><div id="digest" class="meta">Nothing yet. Edit a page and crawl.</div></div>
-    <div class="card"><h2>Detected changes</h2><ul id="changes"></ul></div>
+  <div class="card mock" aria-label="Example digest">
+    <div class="h-sec">Today's digest</div>
+    <p style="margin-bottom:10px">3 changes detected across 3 competitors. 1 price move, 1 new promotion, 1 new page.</p>
+    <div class="chg"><span class="tag price_change">price change</span><span><b>Acme CRM</b> Starter $29 → $23 (−20.7%)</span></div>
+    <div class="chg"><span class="tag new_promo">new promo</span><span><b>Initech</b> 30% off annual plans</span></div>
+    <div class="chg"><span class="tag new_page">new page</span><span><b>Globex</b> /ai-assistant</span></div>
+    <div class="h-sec" style="margin-top:14px">Suggested actions</div>
+    <ol class="actions">
+      <li><b>Review our pricing against Acme's Starter cut</b> <span class="hi">(high)</span></li>
+      <li><b>Counter Initech's promotion</b> <span class="hi">(high)</span></li>
+      <li><b>Read Globex's new AI page</b> <span class="lo">(low)</span></li>
+    </ol>
   </div>
-</main>
+</div></header>
+
+<section id="how"><div class="wrap">
+  <h2>From their website to your next move</h2><p class="sub">Three steps, running on autopilot.</p>
+  <div class="grid g3">
+    <div class="card step"><div class="n">1</div><h3>Crawl</h3><p class="mute">A scheduled crawler fetches each competitor's key pages and stores a snapshot.</p></div>
+    <div class="card step"><div class="n">2</div><h3>Detect</h3><p class="mute">Snapshots are diffed to find price changes, new or removed products, promotions and pages.</p></div>
+    <div class="card step"><div class="n">3</div><h3>Act</h3><p class="mute">An AI step writes a short digest with 3–5 concrete, prioritised actions.</p></div>
+  </div>
+</div></section>
+
+<section id="features" style="background:var(--card);border-block:1px solid var(--line)"><div class="wrap">
+  <h2>Built for competitive teams</h2><p class="sub">Two signals that matter, none of the noise.</p>
+  <div class="grid g3">
+    <div class="feat"><div class="ic">💲</div><h3>Product &amp; price tracking</h3><p class="mute">See every price move with the exact percentage, plus tiers added or retired.</p></div>
+    <div class="feat"><div class="ic">🏷️</div><h3>Promotion detection</h3><p class="mute">Catch new discounts, codes and limited-time offers the moment they appear.</p></div>
+    <div class="feat"><div class="ic">🆕</div><h3>New page radar</h3><p class="mute">Launch pages and repositioning show up as new URLs before the press release.</p></div>
+    <div class="feat"><div class="ic">🤖</div><h3>AI digest</h3><p class="mute">Plain-English summary and 3–5 prioritised actions after every crawl that finds changes.</p></div>
+    <div class="feat"><div class="ic">🔌</div><h3>Crawl API</h3><p class="mute">Scrape to markdown or run async crawls with your own API key and credits.</p></div>
+    <div class="feat"><div class="ic">🧪</div><h3>Live test pages</h3><p class="mute">Edit a sample competitor page yourself and watch detection fire on the next crawl.</p></div>
+  </div>
+</div></section>
+
+<section id="pricing"><div class="wrap" style="text-align:center">
+  <h2>Simple pricing</h2><p class="sub">Pick a plan, create your account, and start monitoring in minutes.</p>
+  <div class="toggle" role="group" aria-label="Billing period"><button id="bm" aria-pressed="true">Monthly</button><button id="ba" aria-pressed="false">Annual <span class="pill good">−20%</span></button></div>
+  <div class="grid g3" id="plans" style="text-align:left"></div>
+  <p class="small mute" style="margin-top:16px">Demo checkout: no payment is taken.</p>
+</div></section>
+
+<section id="faq"><div class="wrap" style="max-width:760px">
+  <h2 style="margin-bottom:24px">Questions</h2>
+  <details><summary>What does RivalWatch monitor?</summary><p>Product and price changes, plus new pages and promotions, on the competitor sites you add. Pages are fetched as static HTML.</p></details>
+  <details><summary>How often does it crawl?</summary><p>On a schedule you can also trigger on demand with “Crawl now”. Each page fetched uses one crawl credit.</p></details>
+  <details><summary>Can I try it without a real competitor?</summary><p>Yes. Every account includes three editable test competitors, so you can change a price and see it detected.</p></details>
+  <details><summary>Is the AI digest required?</summary><p>No. With an Anthropic key configured, Claude writes the digest; otherwise a rule-based digest produces the same 3–5 actions.</p></details>
+</div></section>
+
+<footer><div class="wrap row between wrapx"><span>© RivalWatch demo</span><span class="row"><a href="/login">Sign in</a><a href="#pricing">Pricing</a></span></div></footer>
+
+<div id="loader" role="alert" aria-live="polite"><div class="spinner"></div><h2 id="ltitle"></h2><p class="mute">Setting up your workspace…</p><div class="bar"><i></i></div></div>
+
+<script src="/common.js"></script>
 <script>
-const $ = (id) => document.getElementById(id);
-const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
-let state = null;
+let annual = false, data = null, busy = false;
+const price = (p) => annual ? Math.round(p.price * (1 - data.annualDiscount)) : p.price;
 
-async function post(path, body) { const r = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {}) }); return r.json(); }
-
-function render(s) {
-  state = s;
-  $('credits').textContent = s.credits + ' credits';
-  $('src').textContent = s.digest ? '· ' + (s.digest.source === 'claude' ? 'Claude' : 'rule-based') : '';
-  $('crawl').disabled = s.running; $('crawl').textContent = s.running ? 'Crawling…' : 'Crawl now';
-
-  $('comps').replaceChildren(...s.competitors.map((c) => {
-    const snap = c.snapshot;
-    const prods = snap ? Object.values(snap.products) : [];
-    return el('div', { className: 'card' },
-      el('div', { className: 'row' }, el('strong', {}, c.name), el('span', { className: 'meta' }, snap ? snap.pagesCrawled + ' pages · ' + c.snapshots + ' snapshots' : 'pending')),
-      el('div', { className: 'meta' }, c.url),
-      c.error ? el('div', { className: 'err' }, c.error) : '',
-      el('ul', {}, ...prods.map((p) => el('li', { className: 'row' }, el('span', {}, p.name), el('span', { className: 'price' }, p.price)))),
-      snap && snap.promotions.length ? el('div', { style: 'margin-top:8px' }, ...snap.promotions.map((p) => el('div', { className: 'meta' }, '🏷 ' + p))) : '',
-      snap ? el('div', { className: 'meta', style: 'margin-top:6px' }, 'Pages: ' + snap.pages.join(', ')) : '');
-  }));
-
-  const sel = $('site');
-  if (s.testSites && !sel.options.length) s.testSites.forEach((t) => sel.add(new Option(t.name, t.id)));
-  $('demo').hidden = !s.testSites;
-
-  const d = s.digest;
-  $('digest').replaceChildren(...(d ? [
-    el('p', { style: 'margin:0 0 8px;color:var(--ink)' }, d.summary),
-    el('ol', { className: 'actions', style: 'list-style:none;margin:0;padding:0' }, ...d.actions.map((a) =>
-      el('li', {}, el('strong', {}, a.title + ' '), el('span', { className: { high: 'hi', medium: 'md', low: 'lo' }[a.priority] || 'lo' }, '(' + a.priority + ')'), el('div', { className: 'meta' }, a.why)))),
-  ] : [document.createTextNode('Nothing yet. Edit a page and crawl.')]));
-
-  $('changes').replaceChildren(...(s.changes.length ? s.changes.map((c) =>
-    el('li', {}, el('span', { className: 'tag ' + c.type }, c.type.replace('_', ' ')), el('strong', {}, c.competitor + ': '), c.label,
-      el('div', { className: 'meta' }, new Date(c.ts).toLocaleTimeString()))) : [el('li', { className: 'meta' }, 'No changes yet. Baseline captured, waiting for edits.')]));
+function renderPlans() {
+  $('plans').replaceChildren(...data.plans.map((p) => el('div', { class: 'card plan' + (p.popular ? ' popular' : '') },
+    p.popular && el('span', { class: 'pill acc badge' }, 'Most popular'),
+    el('h3', {}, p.name), el('p', { class: 'mute small' }, p.blurb),
+    el('div', { style: 'margin-top:12px' }, el('span', { class: 'price' }, money(price(p))), el('span', { class: 'mute' }, ' /mo'),
+      annual && el('div', { class: 'small mute' }, 'billed ' + money(price(p) * 12) + ' yearly')),
+    el('ul', { class: 'plain' }, p.features.map((f) => el('li', {}, f))),
+    el('button', { class: 'btn lg ' + (p.popular ? 'primary' : ''), onclick: () => choose(p) }, 'Choose ' + p.name))));
+  $('bm').setAttribute('aria-pressed', !annual); $('ba').setAttribute('aria-pressed', annual);
 }
 
-async function refresh() { render(await (await fetch('/api/state')).json()); }
-setInterval(() => { if (state) { const t = Math.max(0, Math.round((state.nextRun - Date.now()) / 1000)); $('next').textContent = 'next auto-crawl in ' + Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); } }, 1000);
-setInterval(refresh, 4000);
+// Plan chosen -> 2 second loader -> login (plan carried in the URL)
+function choose(p) {
+  if (busy) return; busy = true;
+  $('ltitle').textContent = `Preparing your ${p.name} plan`;
+  $('loader').classList.add('show');
+  setTimeout(() => { location.href = `/login?plan=${p.id}&billing=${annual ? 'annual' : 'monthly'}`; }, 2000);
+}
 
-$('crawl').onclick = async () => { $('crawl').disabled = true; await post('/api/crawl'); await refresh(); };
-document.querySelectorAll('[data-a]').forEach((b) => b.onclick = async () => {
-  const r = await post('/api/test/edit', { site: $('site').value, action: b.dataset.a });
-  $('editmsg').textContent = r.edited ? 'Edited: ' + r.edited + '. Now press “Crawl now”.' : r.error;
-});
-$('reset').onclick = async () => { $('reset').disabled = true; await post('/api/test/reset'); $('reset').disabled = false; $('editmsg').textContent = 'Reset to baseline.'; await refresh(); };
-refresh();
+$('bm').onclick = () => { annual = false; renderPlans(); };
+$('ba').onclick = () => { annual = true; renderPlans(); };
+api('/api/plans', { noRedirect: true }).then((d) => { data = d; renderPlans(); });
+api('/api/session').then(({ user: u }) => { if (!u) return; const a = $('signin'); a.textContent = 'Dashboard'; a.href = u.role === 'admin' ? '/admin' : '/app'; });
+window.addEventListener('pageshow', (e) => { if (e.persisted) { busy = false; $('loader').classList.remove('show'); } });
 </script>
 </body>
 </html>

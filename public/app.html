@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard: RivalWatch</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  header.bar { background:var(--card); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:10; }
+  header.bar .wrap { display:flex; align-items:center; justify-content:space-between; gap:12px; height:58px; flex-wrap:wrap; }
+  .tabs { display:flex; gap:4px; border-bottom:1px solid var(--line); margin:18px 0 18px; overflow-x:auto; }
+  .tabs button { font:inherit; font-weight:600; background:none; border:0; padding:10px 14px; color:var(--mute); cursor:pointer; border-bottom:2px solid transparent; white-space:nowrap; }
+  .tabs button[aria-selected=true] { color:var(--ink); border-bottom-color:var(--acc); }
+  main { padding-bottom:60px; }
+  .price { font-variant-numeric:tabular-nums; }
+  code, pre { font:13px ui-monospace,Menlo,monospace; } pre { background:var(--bg); border:1px solid var(--line); border-radius:9px; padding:12px; overflow-x:auto; margin:8px 0 0; }
+  .planopt { border:2px solid var(--line); border-radius:12px; padding:14px; } .planopt.cur { border-color:var(--acc); }
+  .bar2 { height:6px; background:var(--line); border-radius:9px; overflow:hidden; margin-top:8px; } .bar2 i { display:block; height:100%; background:var(--acc); }
+</style>
+</head>
+<body>
+<header class="bar"><div class="wrap">
+  <a class="logo" href="/">RivalWatch</a>
+  <div class="row wrapx"><span class="pill acc" id="planpill"></span><span class="pill" id="credits"></span><span class="small mute" id="who"></span>
+    <button class="btn sm" id="out">Sign out</button></div>
+</div></header>
+
+<main class="wrap">
+  <div class="tabs" role="tablist" id="tabs"></div>
+  <div id="view"></div>
+</main>
+
+<script src="/common.js"></script>
+<script>
+const TABS = [['overview', 'Overview'], ['competitors', 'Competitors'], ['demo', 'Live demo'], ['account', 'Account & API']];
+let S = null, ME = null, selSite = '', editMsg = 'Pick an edit, then crawl.', tab = (location.hash || '#overview').slice(1);
+if (!TABS.some(([k]) => k === tab)) tab = 'overview';
+
+const typeLabel = (t) => t.replace('_', ' ');
+const kpi = (v, l, extra) => el('div', { class: 'card kpi' }, el('div', { class: 'v' }, String(v)), el('div', { class: 'l' }, l), extra);
+
+function digestCard() {
+  const d = S.digest;
+  return el('div', { class: 'card' },
+    el('div', { class: 'h-sec' }, 'AI digest ', el('span', { class: 'mute', style: 'text-transform:none;letter-spacing:0' }, d ? '· ' + (d.source === 'claude' ? 'Claude' : 'rule-based') : '')),
+    d ? [el('p', { style: 'margin-bottom:8px' }, d.summary),
+      el('ol', { class: 'actions' }, d.actions.map((a) => el('li', {}, el('b', {}, a.title + ' '),
+        el('span', { class: { high: 'hi', medium: 'md', low: 'lo' }[a.priority] || 'lo' }, '(' + a.priority + ')'), el('div', { class: 'small mute' }, a.why))))]
+      : el('p', { class: 'mute' }, 'No digest yet. Open the Live demo tab, edit a competitor page, then press “Crawl now”.'));
+}
+function changesCard() {
+  return el('div', { class: 'card' }, el('div', { class: 'h-sec' }, 'Detected changes'),
+    S.changes.length ? el('ul', { class: 'plain' }, S.changes.slice(0, 12).map((c) => el('li', {},
+      el('span', { class: 'tag ' + c.type }, typeLabel(c.type)), el('b', {}, c.competitor + ': '), c.label, el('div', { class: 'small mute' }, ago(c.ts)))))
+      : el('p', { class: 'mute' }, 'No changes yet. The baseline is captured; changes appear after the next crawl.'));
+}
+
+function overview() {
+  const used = S.plan.credits - S.credits;
+  return [
+    el('div', { class: 'row between wrapx', style: 'margin-bottom:14px' },
+      el('div', {}, el('h1', { style: 'font-size:24px' }, 'Overview'), el('p', { class: 'small mute', id: 'next' })),
+      el('button', { class: 'btn primary', id: 'crawl', disabled: S.running, onclick: crawlNow }, S.running ? 'Crawling…' : 'Crawl now')),
+    el('div', { class: 'grid g4', style: 'margin-bottom:14px' },
+      kpi(`${S.competitors.length}/${S.plan.competitors}`, 'Competitors monitored'), kpi(S.changes.length, 'Changes detected'),
+      kpi(S.credits, 'Credits left', el('div', { class: 'bar2' }, el('i', { style: `width:${Math.max(0, Math.min(100, S.credits / S.plan.credits * 100))}%` }))),
+      kpi(S.lastRun ? ago(S.lastRun) : '–', 'Last crawl')),
+    el('div', { class: 'grid g2' }, digestCard(), changesCard()),
+  ];
+}
+
+function compCard(c, withRemove) {
+  const snap = c.snapshot, prods = snap ? Object.values(snap.products) : [];
+  return el('div', { class: 'card' },
+    el('div', { class: 'row between' }, el('b', {}, c.name), withRemove && el('button', { class: 'btn sm danger', onclick: () => removeComp(c) }, 'Remove')),
+    el('div', { class: 'small mute', style: 'word-break:break-all' }, c.url),
+    el('div', { class: 'small mute' }, snap ? `${snap.pagesCrawled} pages · ${c.snapshots} snapshots` : 'Baseline pending…'),
+    c.error && el('div', { class: 'err' }, c.error),
+    prods.length ? el('ul', { class: 'plain', style: 'margin-top:8px' }, prods.map((p) => el('li', { class: 'row between' }, el('span', {}, p.name), el('span', { class: 'price' }, p.price)))) : null,
+    snap && snap.promotions.map((p) => el('div', { class: 'small', style: 'margin-top:8px' }, '🏷 ' + p)),
+    snap && el('div', { class: 'small mute', style: 'margin-top:8px' }, 'Pages: ' + snap.pages.join(', ')));
+}
+
+function competitors() {
+  const full = S.competitors.length >= S.plan.competitors;
+  return [
+    el('h1', { style: 'font-size:24px;margin-bottom:14px' }, 'Competitors'),
+    el('form', { class: 'card', style: 'margin-bottom:14px', novalidate: true, onsubmit: addComp },
+      el('div', { class: 'h-sec' }, `Add a competitor (${S.competitors.length}/${S.plan.competitors} on ${S.plan.name})`),
+      el('div', { class: 'grid g3' }, el('div', {}, el('label', { for: 'cn' }, 'Name'), el('input', { id: 'cn', placeholder: 'Acme Inc.' })),
+        el('div', {}, el('label', { for: 'cu' }, 'URL'), el('input', { id: 'cu', placeholder: 'https://example.com/pricing', type: 'url' })),
+        el('div', { style: 'align-self:end' }, el('button', { class: 'btn primary', disabled: full }, 'Add & crawl'))),
+      full ? el('p', { class: 'err' }, 'Plan limit reached. Upgrade in Account & API to add more.') : el('p', { class: 'small mute', style: 'margin-top:6px' }, 'Public sites only; private or internal addresses are blocked.'),
+      el('p', { class: 'err', id: 'cerr' })),
+    el('div', { class: 'grid g3' }, S.competitors.map((c) => compCard(c, true))),
+  ];
+}
+
+function demo() {
+  return [
+    el('h1', { style: 'font-size:24px;margin-bottom:6px' }, 'Live demo'),
+    el('p', { class: 'mute', style: 'margin-bottom:14px' }, 'These are test competitor pages only you can edit. Change one, press “Crawl now”, and watch RivalWatch detect it and write the digest.'),
+    S.testSites.length ? el('div', { class: 'card', style: 'margin-bottom:14px' },
+      el('div', { class: 'row wrapx' },
+        el('select', { id: 'site', class: 'inline', 'aria-label': 'Competitor', onchange: (e) => { selSite = e.target.value; } }, S.testSites.map((t) => el('option', { value: t.id, selected: t.id === selSite }, t.name))),
+        ...[['price_drop', 'Cut a price 20%'], ['price_hike', 'Raise top price 15%'], ['add_tier', 'Add new tier'], ['promo', 'Launch promotion'], ['new_page', 'Publish new page']]
+          .map(([a, l]) => el('button', { class: 'btn sm', onclick: () => editSite(a) }, l)),
+        el('button', { class: 'btn sm', onclick: resetDemo }, 'Reset')),
+      el('p', { class: 'small mute', id: 'editmsg', style: 'margin-top:10px' }, editMsg),
+      el('div', { class: 'row wrapx small', style: 'margin-top:6px' }, el('span', { class: 'mute' }, 'View the page:'), S.testSites.map((t) => el('a', { href: t.url + 'pricing', target: '_blank', rel: 'noopener' }, t.name))),
+      el('div', { style: 'margin-top:12px' }, el('button', { class: 'btn primary', onclick: crawlNow }, 'Crawl now')))
+      : el('div', { class: 'card mute' }, 'You removed the demo competitors. Press Reset to bring them back.', el('div', { style: 'margin-top:8px' }, el('button', { class: 'btn sm', onclick: resetDemo }, 'Reset'))),
+    el('div', { class: 'grid g2' }, digestCard(), changesCard()),
+  ];
+}
+
+function account() {
+  const base = location.origin;
+  const key = ME.apiKey;
+  return [
+    el('h1', { style: 'font-size:24px;margin-bottom:14px' }, 'Account & API'),
+    el('div', { class: 'card', style: 'margin-bottom:14px' }, el('div', { class: 'h-sec' }, 'Profile'),
+      el('div', {}, el('b', {}, ME.name), ' · ', ME.email), el('div', { class: 'small mute' }, 'Member since ' + new Date(ME.createdAt).toLocaleDateString())),
+    el('div', { class: 'h-sec' }, 'Plan (demo checkout, no payment taken)'),
+    el('div', { class: 'grid g3', style: 'margin-bottom:14px' }, Object.values(PLANS).map((p) => el('div', { class: 'planopt' + (p.id === ME.plan ? ' cur' : '') },
+      el('div', { class: 'row between' }, el('b', {}, p.name), p.id === ME.plan && el('span', { class: 'pill acc' }, 'Current')),
+      el('div', {}, el('b', { style: 'font-size:22px' }, money(p.price)), el('span', { class: 'mute' }, '/mo')),
+      el('div', { class: 'small mute' }, `${p.competitors} competitors · ${p.credits.toLocaleString()} credits`),
+      p.id !== ME.plan && el('button', { class: 'btn sm', style: 'margin-top:10px', onclick: () => changePlan(p) }, (p.price > PLANS[ME.plan].price ? 'Upgrade' : 'Downgrade') + ' to ' + p.name)))),
+    el('div', { class: 'card' }, el('div', { class: 'h-sec' }, 'Crawl API'),
+      el('p', { class: 'small mute' }, 'SocialCrawl-style endpoints. Each page fetched costs 1 credit.'),
+      el('div', { class: 'row wrapx', style: 'margin-top:8px' }, el('code', { id: 'keytxt' }, key.slice(0, 7) + '…••••••••••••'),
+        el('button', { class: 'btn sm', onclick: () => { $('keytxt').textContent = key; } }, 'Reveal'),
+        el('button', { class: 'btn sm', onclick: () => navigator.clipboard?.writeText(key).then(() => toast('Copied')) }, 'Copy'),
+        el('button', { class: 'btn sm danger', onclick: rotate }, 'Rotate')),
+      el('pre', {}, `curl -H "x-api-key: ${key.slice(0, 7)}…" "${base}/v1/credits/balance"\ncurl -H "x-api-key: …" "${base}/v1/web/scrape?url=https://example.com"\ncurl -X POST -H "x-api-key: …" -H "content-type: application/json" \\\n  ${base}/v1/web/crawl -d '{"url":"https://example.com","max_depth":1,"limit":5}'`)),
+  ];
+}
+
+// ---- actions
+async function crawlNow() { document.querySelectorAll('#crawl').forEach((b) => (b.disabled = true)); toast('Crawling…'); await api('/api/crawl', { method: 'POST' }); await refresh(); toast('Crawl complete'); }
+async function editSite(action) { try { const r = await api('/api/test/edit', { method: 'POST', body: { site: $('site').value, action } }); editMsg = 'Edited: ' + r.edited + '. Now press “Crawl now”.'; $('editmsg').textContent = editMsg; } catch (e) { toast(e.message); } }
+async function resetDemo() { editMsg = 'Reset to baseline.'; toast('Resetting…'); await api('/api/test/reset', { method: 'POST' }); await refresh(); toast('Demo reset'); }
+async function addComp(e) {
+  e.preventDefault(); $('cerr').textContent = '';
+  try { await api('/api/competitors', { method: 'POST', body: { name: $('cn').value, url: $('cu').value } }); toast('Added. Baseline crawl started.'); setTimeout(refresh, 1500); await refresh(); }
+  catch (x) { $('cerr').textContent = x.message; }
+}
+async function removeComp(c) { if (!confirm(`Stop monitoring ${c.name}?`)) return; await api('/api/competitors/' + c.id, { method: 'DELETE' }); await refresh(); }
+async function changePlan(p) { await api('/api/me/plan', { method: 'POST', body: { plan: p.id } }); toast('Switched to ' + p.name); await refresh(); }
+async function rotate() { if (!confirm('Rotate the API key? The old key stops working.')) return; await api('/api/me/rotate-key', { method: 'POST' }); await refresh(); toast('New key issued'); }
+
+// ---- shell
+let PLANS = {};
+function paint() {
+  $('tabs').replaceChildren(...TABS.map(([k, l]) => el('button', { role: 'tab', 'aria-selected': k === tab, onclick: () => { tab = k; location.hash = k; paint(); } }, l)));
+  const v = { overview, competitors, demo, account }[tab]();
+  const focus = document.activeElement?.id;
+  $('view').replaceChildren(...[v].flat());
+  if (focus && $(focus) && ['cn', 'cu'].includes(focus)) $(focus).focus();
+  $('planpill').textContent = S.plan.name + ' plan'; $('credits').textContent = S.credits.toLocaleString() + ' credits'; $('who').textContent = ME.email;
+}
+async function refresh() {
+  [S, ME] = await Promise.all([api('/api/state'), api('/api/me')]);
+  if (['cn', 'cu', 'site'].includes(document.activeElement?.id)) { $('planpill').textContent = S.plan.name + ' plan'; $('credits').textContent = S.credits.toLocaleString() + ' credits'; return; } // don't clobber typing
+  paint();
+}
+setInterval(() => { if (!S || !$('next')) return; const t = Math.max(0, Math.round((S.nextRun - Date.now()) / 1000)); $('next').textContent = `Auto-crawl in ${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; }, 1000);
+setInterval(() => { if (!document.hidden) refresh().catch(() => {}); }, 5000);
+$('out').onclick = logout;
+api('/api/plans', { noRedirect: true }).then((d) => { d.plans.forEach((p) => PLANS[p.id] = p); return refresh(); });
+</script>
+</body>
+</html>

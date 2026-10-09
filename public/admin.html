@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin: RivalWatch</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  header.bar { background:#1b1d2b; color:#fff; } header.bar .wrap { display:flex; align-items:center; justify-content:space-between; height:58px; gap:12px; flex-wrap:wrap; }
+  header.bar .logo { color:#fff; } header.bar .btn { background:transparent; color:#fff; border-color:#3b3f55; }
+  main { padding:22px 0 60px; }
+  .dist { display:flex; height:12px; border-radius:99px; overflow:hidden; background:var(--line); margin:10px 0 8px; }
+  .dist i { display:block; height:100%; } .lg { display:flex; gap:14px; flex-wrap:wrap; font-size:13px; } .lg b { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:6px; }
+  .c-starter { background:#94a3b8; } .c-pro { background:var(--acc); } .c-business { background:#06b6d4; }
+  .toolbar { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; } .toolbar input { max-width:280px; } .toolbar select { width:auto; }
+  .av { width:32px; height:32px; border-radius:50%; background:var(--acc-soft); color:var(--acc); display:grid; place-items:center; font-weight:800; flex:none; }
+  td .acts { display:flex; gap:6px; flex-wrap:wrap; min-width:250px; max-width:340px; } td .acts .btn, td .small { white-space:nowrap; }
+  .meter { width:90px; height:5px; background:var(--line); border-radius:9px; overflow:hidden; margin-top:4px; } .meter i { display:block; height:100%; background:var(--acc); }
+</style>
+</head>
+<body>
+<header class="bar"><div class="wrap">
+  <div class="row"><a class="logo" href="/">RivalWatch</a><span class="pill" style="background:#3b3f55;color:#fff">Admin</span></div>
+  <div class="row wrapx"><span class="small" id="who" style="opacity:.8"></span><a class="btn sm" href="/app">My dashboard</a><button class="btn sm" id="out">Sign out</button></div>
+</div></header>
+
+<main class="wrap">
+  <div class="row between wrapx" style="margin-bottom:14px"><h1 style="font-size:24px">User management</h1><button class="btn primary" id="add">+ Add user</button></div>
+  <div class="grid g4" id="kpis" style="margin-bottom:14px"></div>
+  <div class="card" style="margin-bottom:14px"><div class="h-sec">Active customers by plan</div><div class="dist" id="dist"></div><div class="lg" id="legend"></div></div>
+
+  <div class="card" style="margin-bottom:14px">
+    <div class="toolbar">
+      <input id="q" type="search" placeholder="Search name or email" aria-label="Search users">
+      <select id="fplan" aria-label="Plan filter"><option value="">All plans</option></select>
+      <select id="fstatus" aria-label="Status filter"><option value="">All statuses</option><option value="active">Active</option><option value="suspended">Suspended</option></select>
+    </div>
+    <div class="scroll"><table><thead><tr><th>User</th><th>Role</th><th>Plan</th><th>Status</th><th>Usage</th><th>Last login</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
+    <p class="mute small" id="empty" hidden style="padding:14px">No users match.</p>
+  </div>
+
+  <div class="card"><div class="h-sec">Audit log</div><ul class="plain" id="audit"></ul></div>
+</main>
+
+<dialog id="dlg"><form method="dialog" id="uform" class="stack" novalidate>
+  <h2 style="font-size:20px">Add user</h2>
+  <div><label for="un">Name</label><input id="un"></div>
+  <div><label for="ue">Email</label><input id="ue" type="email"></div>
+  <div><label for="up">Temporary password</label><input id="up" type="text" minlength="8" placeholder="At least 8 characters"></div>
+  <div class="grid g2" style="gap:10px"><div><label for="upl">Plan</label><select id="upl"></select></div><div><label for="ur">Role</label><select id="ur"><option value="user">User</option><option value="admin">Admin</option></select></div></div>
+  <p class="err" id="uerr" role="alert"></p>
+  <div class="row" style="justify-content:flex-end"><button type="button" class="btn" id="ucancel">Cancel</button><button class="btn primary" id="usave">Create user</button></div>
+</form></dialog>
+
+<script src="/common.js"></script>
+<script>
+let PLANS = {}, ME = null, users = [];
+
+const initials = (n) => n.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
+const kpi = (v, l) => el('div', { class: 'card kpi' }, el('div', { class: 'v' }, String(v)), el('div', { class: 'l' }, l));
+
+async function loadStats() {
+  const s = await api('/api/admin/stats');
+  $('kpis').replaceChildren(kpi(s.total, 'Total users'), kpi(s.active, 'Active'), kpi(s.suspended, 'Suspended'), kpi(money(s.mrr), 'Monthly recurring revenue'));
+  const tot = Object.values(s.byPlan).reduce((a, b) => a + b, 0) || 1;
+  $('dist').replaceChildren(...Object.entries(s.byPlan).map(([k, n]) => el('i', { class: 'c-' + k, style: `width:${n / tot * 100}%`, title: `${PLANS[k].name}: ${n}` })));
+  $('legend').replaceChildren(...Object.entries(s.byPlan).map(([k, n]) => el('span', {}, el('b', { class: 'c-' + k }), `${PLANS[k].name}: ${n}`)));
+}
+
+async function loadUsers() {
+  const qs = new URLSearchParams({ q: $('q').value, plan: $('fplan').value, status: $('fstatus').value });
+  users = (await api('/api/admin/users?' + qs)).users;
+  $('empty').hidden = users.length > 0;
+  $('rows').replaceChildren(...users.map(rowFor));
+}
+
+function rowFor(u) {
+  const self = u.id === ME.id;
+  const planSel = el('select', { class: 'inline', 'aria-label': 'Plan for ' + u.email, onchange: (e) => patch(u, { plan: e.target.value }, `${u.name} moved to ${PLANS[e.target.value].name}`) },
+    Object.values(PLANS).map((p) => el('option', { value: p.id, selected: p.id === u.plan }, p.name)));
+  const pct = Math.max(0, Math.min(100, u.credits / u.creditLimit * 100));
+  return el('tr', {},
+    el('td', {}, el('div', { class: 'row' }, el('div', { class: 'av' }, initials(u.name)), el('div', {}, el('b', {}, u.name + (self ? ' (you)' : '')), el('div', { class: 'small mute' }, u.email)))),
+    el('td', {}, el('span', { class: 'pill' + (u.role === 'admin' ? ' acc' : '') }, u.role)),
+    el('td', {}, planSel),
+    el('td', {}, el('span', { class: 'pill ' + (u.status === 'active' ? 'good' : 'bad') }, u.status)),
+    el('td', {}, el('div', { class: 'small', style: 'white-space:nowrap' }, `${u.competitors} sites · ${u.credits.toLocaleString()} credits`), el('div', { class: 'meter' }, el('i', { style: `width:${pct}%` }))),
+    el('td', { class: 'small mute' }, ago(u.lastLoginAt)),
+    el('td', {}, el('div', { class: 'acts' },
+      el('button', { class: 'btn sm', disabled: self && u.status === 'active', onclick: () => patch(u, { status: u.status === 'active' ? 'suspended' : 'active' }, `${u.name} ${u.status === 'active' ? 'suspended' : 'reactivated'}`) }, u.status === 'active' ? 'Suspend' : 'Reactivate'),
+      el('button', { class: 'btn sm', disabled: self, onclick: () => patch(u, { role: u.role === 'admin' ? 'user' : 'admin' }, `${u.name} is now ${u.role === 'admin' ? 'a user' : 'an admin'}`) }, u.role === 'admin' ? 'Make user' : 'Make admin'),
+      el('button', { class: 'btn sm', onclick: () => post(`/api/admin/users/${u.id}/reset-credits`, {}, 'Credits reset') }, 'Reset credits'),
+      el('button', { class: 'btn sm', onclick: () => resetPw(u) }, 'Set password'),
+      el('button', { class: 'btn sm danger', disabled: self, onclick: () => del(u) }, 'Delete'))));
+}
+
+async function run(fn, ok) { try { await fn(); if (ok) toast(ok); } catch (e) { toast(e.message); } await refresh(); }
+const patch = (u, body, ok) => run(() => api('/api/admin/users/' + u.id, { method: 'PATCH', body }), ok);
+const post = (path, body, ok) => run(() => api(path, { method: 'POST', body }), ok);
+const del = (u) => confirm(`Delete ${u.email}? This removes their account and workspace.`) && run(() => api('/api/admin/users/' + u.id, { method: 'DELETE' }), 'User deleted');
+function resetPw(u) {
+  const pw = prompt(`New temporary password for ${u.email} (min 8 characters). Their sessions will be signed out.`);
+  if (pw) post(`/api/admin/users/${u.id}/reset-password`, { password: pw }, 'Password updated');
+}
+
+async function loadAudit() {
+  const { audit } = await api('/api/admin/audit');
+  $('audit').replaceChildren(...(audit.length ? audit.slice(0, 15).map((a) => el('li', { class: 'small' },
+    el('b', {}, a.actor), ' ', a.action.replace('_', ' '), a.target && a.target !== a.actor ? [' → ', el('b', {}, a.target)] : '', a.detail && el('span', { class: 'mute' }, ' ' + a.detail), el('span', { class: 'mute' }, ' · ' + ago(a.ts))))
+    : [el('li', { class: 'mute small' }, 'No admin actions yet.')]));
+}
+const refresh = () => Promise.all([loadStats(), loadUsers(), loadAudit()]);
+
+// add-user dialog
+$('add').onclick = () => { $('uform').reset(); $('uerr').textContent = ''; $('dlg').showModal(); };
+$('ucancel').onclick = () => $('dlg').close();
+$('uform').addEventListener('submit', async (e) => {
+  e.preventDefault(); $('uerr').textContent = '';
+  try { await api('/api/admin/users', { method: 'POST', body: { name: $('un').value, email: $('ue').value, password: $('up').value, plan: $('upl').value, role: $('ur').value } }); $('dlg').close(); toast('User created'); refresh(); }
+  catch (x) { $('uerr').textContent = x.message; }
+});
+let t; $('q').oninput = () => { clearTimeout(t); t = setTimeout(loadUsers, 200); };
+$('fplan').onchange = $('fstatus').onchange = loadUsers;
+$('out').onclick = logout;
+
+(async () => {
+  [ME, { plans: PLANS }] = [await api('/api/me'), await api('/api/plans')];
+  PLANS = Object.fromEntries(PLANS.map((p) => [p.id, p]));
+  $('who').textContent = ME.email;
+  Object.values(PLANS).forEach((p) => { $('fplan').add(new Option(p.name, p.id)); $('upl').add(new Option(p.name + ' · ' + money(p.price), p.id)); });
+  refresh();
+  setInterval(() => { if (!document.hidden && !$('dlg').open) refresh().catch(() => {}); }, 8000);
+})();
+</script>
+</body>
+</html>

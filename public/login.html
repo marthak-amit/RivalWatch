@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in: RivalWatch</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  body { min-height:100vh; display:grid; grid-template-columns:1fr 1fr; }
+  @media (max-width:860px) { body { grid-template-columns:1fr; } .side { display:none; } }
+  .side { background:linear-gradient(150deg,#312e81,#4f46e5 55%,#06b6d4); color:#fff; padding:48px; display:flex; flex-direction:column; justify-content:space-between; }
+  .side .logo { color:#fff; } .side h2 { font-size:30px; margin-bottom:10px; } .side p { opacity:.85; }
+  main { display:grid; place-items:center; padding:28px 20px; } .box { width:min(400px,100%); }
+  .tabs { display:grid; grid-template-columns:1fr 1fr; background:var(--line); border-radius:10px; padding:3px; margin:18px 0; }
+  .tabs button { font:inherit; font-weight:600; border:0; background:transparent; padding:8px; border-radius:8px; cursor:pointer; color:var(--mute); }
+  .tabs button[aria-selected=true] { background:var(--card); color:var(--ink); box-shadow:var(--shadow); }
+  .demo { margin-top:18px; padding:12px; border:1px dashed var(--line); border-radius:10px; }
+</style>
+</head>
+<body>
+<aside class="side"><a class="logo" href="/">RivalWatch</a>
+  <div><h2>Your competitors never stop changing.</h2><p>Sign in to see what moved this week and what to do about it.</p></div>
+  <p class="small">Demo environment · no real payments</p></aside>
+<main><div class="box">
+  <a class="logo" href="/" style="display:none" id="mlogo">RivalWatch</a>
+  <h1 id="title" style="font-size:26px">Welcome back</h1>
+  <div id="planchip" style="margin-top:10px"></div>
+  <div id="already" class="card" hidden style="margin-top:16px"></div>
+  <div id="formwrap">
+    <div class="tabs" role="tablist"><button role="tab" id="t-in" aria-selected="true">Sign in</button><button role="tab" id="t-up" aria-selected="false">Create account</button></div>
+    <form id="form" class="stack" novalidate>
+      <div id="namebox" hidden><label for="name">Full name</label><input id="name" autocomplete="name"></div>
+      <div><label for="email">Email</label><input id="email" type="email" autocomplete="email" required></div>
+      <div><label for="pw">Password</label><input id="pw" type="password" autocomplete="current-password" required minlength="8"></div>
+      <p class="err" id="err" role="alert"></p>
+      <button class="btn primary lg" style="width:100%" id="go">Sign in</button>
+    </form>
+    <div class="demo small" id="demo" hidden><b>Demo accounts</b><div class="row wrapx" style="margin-top:8px" id="demobtns"></div></div>
+  </div>
+</div></main>
+<script src="/common.js"></script>
+<script>
+const q = new URLSearchParams(location.search);
+let mode = 'in', plans = {};
+
+function setMode(m) {
+  mode = m;
+  $('t-in').setAttribute('aria-selected', m === 'in'); $('t-up').setAttribute('aria-selected', m === 'up');
+  $('namebox').hidden = m === 'in'; $('go').textContent = m === 'in' ? 'Sign in' : 'Create account & continue';
+  $('title').textContent = m === 'in' ? 'Welcome back' : 'Create your account';
+  $('pw').autocomplete = m === 'in' ? 'current-password' : 'new-password'; $('err').textContent = '';
+}
+$('t-in').onclick = () => setMode('in'); $('t-up').onclick = () => setMode('up');
+
+$('form').addEventListener('submit', async (e) => {
+  e.preventDefault(); $('err').textContent = ''; $('go').disabled = true;
+  try {
+    const body = { email: $('email').value, password: $('pw').value };
+    if (mode === 'up') { body.name = $('name').value; body.plan = q.get('plan') || 'starter'; }
+    const r = await api('/api/auth/' + (mode === 'in' ? 'login' : 'signup'), { method: 'POST', body, noRedirect: true });
+    location.href = r.redirect;
+  } catch (x) { $('err').textContent = x.message; $('go').disabled = false; }
+});
+
+(async () => {
+  const d = await api('/api/plans', { noRedirect: true });
+  d.plans.forEach((p) => plans[p.id] = p);
+  const plan = plans[q.get('plan')];
+  if (plan) {
+    const annual = q.get('billing') === 'annual';
+    const price = annual ? Math.round(plan.price * (1 - d.annualDiscount)) : plan.price;
+    $('planchip').replaceChildren(el('span', { class: 'pill acc' }, `${plan.name} plan · ${money(price)}/mo${annual ? ' billed yearly' : ''}`),
+      el('p', { class: 'small mute', style: 'margin-top:6px' }, 'Create your account to start. Already registered? Sign in instead.'));
+    setMode('up');
+  }
+  const demos = [['Use demo user', d.demo.user], ['Use admin', d.demo.admin]].filter(([, v]) => v);
+  if (demos.length) { $('demo').hidden = false; $('demobtns').replaceChildren(...demos.map(([l, v]) => el('button', { class: 'btn sm', type: 'button',
+    onclick: () => { setMode('in'); $('email').value = v.email; $('pw').value = v.password; } }, l))); }
+  if (q.get('demo')) { const v = d.demo.user; if (v) { $('email').value = v.email; $('pw').value = v.password; } }
+
+  api('/api/session').then(({ user: u }) => {
+    if (!u) return;
+    $('formwrap').hidden = true; $('already').hidden = false; $('title').textContent = 'You are signed in';
+    $('already').replaceChildren(el('p', {}, 'Signed in as ', el('b', {}, u.email), '.'),
+      el('div', { class: 'row', style: 'margin-top:12px' },
+        el('a', { class: 'btn primary', href: u.role === 'admin' ? '/admin' : '/app' }, 'Continue to ' + (u.role === 'admin' ? 'admin panel' : 'dashboard')),
+        el('button', { class: 'btn', onclick: async () => { await logout().catch(() => {}); } }, 'Sign out')));
+  });
+})();
+</script>
+</body>
+</html>
