@@ -2,21 +2,25 @@
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictBool
 
 from ...core.plans import PLANS
 from ...core.security import hash_password
 from ...db.pool import get_conn
 from ...db.repositories import sessions as session_repo
 from ...db.repositories import users
-from ...services import store_sync, workspaces
+from ...services import pricing, store_sync, workspaces
 from .ui import (
     EMAIL,
+    PRICE_STATUS,
+    PriceBody,
+    PriceSettings,
     StoreBody,
     StorePatch,
     UiError,
     _check_clean,
     json_only,
+    priced,
     public_user,
     store_patch,
     ui_admin,
@@ -210,3 +214,55 @@ def admin_delete_store(user_id: int, admin=Depends(ui_admin), conn=Depends(get_c
     store_sync.disconnect(conn, t)
     users.audit(conn, admin, "store_disconnect", t)
     return {"ok": True}
+
+
+# ---- clients' prices: the agency reviews, applies or makes price changes for them ----------------------------------
+
+class AdminPriceSettings(PriceSettings):
+    adminOnly: StrictBool | None = None  # true: only an admin applies this client's price changes
+
+
+@router.get("/prices")
+def admin_list_prices(status: str | None = PRICE_STATUS, user_id: int | None = None, conn=Depends(get_conn)):
+    """Every client's price changes (e.g. status=pending: what's waiting for the agency)."""
+    project = workspaces.get_or_create(conn, _store_owner(conn, user_id)) if user_id else None
+    return {"changes": pricing.list_changes(conn, project_id=project["id"] if project else None, status=status)}
+
+
+@router.post("/users/{user_id}/prices")
+def admin_request_price(user_id: int, body: PriceBody, admin=Depends(ui_admin), conn=Depends(get_conn)):
+    t = _store_owner(conn, user_id)
+    out = priced(pricing.request, conn, workspaces.get_or_create(conn, t), admin, body.sku.strip(), body.newPrice)
+    users.audit(conn, admin, "price_request", t, f"{body.sku} -> {body.newPrice}")
+    return out
+
+
+@router.post("/prices/{change_id}/{action}")
+def admin_price_action(change_id: int, action: str, admin=Depends(ui_admin), conn=Depends(get_conn)):
+    """apply | cancel | revert any client's change."""
+    if action not in ("apply", "cancel", "revert"):
+        raise UiError(404, "Not found")
+    project = priced(pricing.project_of, conn, change_id)
+    if action == "apply":
+        out = {"change": priced(pricing.apply, conn, project, change_id, admin)}
+    elif action == "cancel":
+        out = {"change": priced(pricing.cancel, conn, project, change_id)}
+    else:
+        out = priced(pricing.revert, conn, project, change_id, admin)
+    owner = users.ui_row(conn, project["owner_user_id"]) if project["owner_user_id"] else None
+    users.audit(conn, admin, f"price_{action}", owner, f"change {change_id}")
+    return out
+
+
+@router.get("/users/{user_id}/prices/settings")
+def admin_get_price_settings(user_id: int, conn=Depends(get_conn)):
+    return pricing.settings_of(workspaces.get_or_create(conn, _store_owner(conn, user_id)))
+
+
+@router.patch("/users/{user_id}/prices/settings")
+def admin_patch_price_settings(user_id: int, body: AdminPriceSettings, admin=Depends(ui_admin), conn=Depends(get_conn)):
+    t = _store_owner(conn, user_id)
+    out = pricing.update_settings(conn, workspaces.get_or_create(conn, t), admin, max_change_pct=body.maxChangePct,
+                                  min_margin_pct=body.minMarginPct, admin_only=body.adminOnly)
+    users.audit(conn, admin, "price_settings", t, ", ".join(sorted(body.model_fields_set)))
+    return out

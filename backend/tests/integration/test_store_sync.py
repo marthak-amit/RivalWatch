@@ -7,14 +7,15 @@ from tests.integration.test_ui_api import signup
 from competitor_moves.workers import worker
 
 
-def magento(site, catalog: list[dict], *, token_required: str | None = None):
-    """A stand-in Magento GraphQL endpoint serving `catalog` 2 products per page."""
+def magento(site, catalog: list[dict]):
+    """A stand-in Magento GraphQL endpoint serving `catalog` 2 products per page. Like Magento 2.4.4+, it fails any query
+    that carries an integration token as a Bearer, so these tests also check the token never goes to GraphQL."""
     def handle(path, headers):
         p = urlsplit(path)
         if p.path != "/graphql":
             return None
-        if token_required and headers.get("Authorization") != f"Bearer {token_required}":
-            return 200, {"content-type": "application/json"}, json.dumps({"errors": [{"message": "The consumer isn't authorized"}]})
+        if headers.get("Authorization"):
+            return 200, {"content-type": "application/json"}, json.dumps({"errors": [{"message": "Composite reader could not read a token"}]})
         q = parse_qs(p.query)
         if "storeConfig" in q["query"][0]:
             data = {"storeConfig": {"store_name": "Louped", "base_currency_code": "USD", "base_url": site.base + "/",
@@ -78,10 +79,10 @@ def test_connect_sync_and_see_our_own_changes(client, site, conn):
 
 
 def test_the_token_is_encrypted_never_returned_and_errors_are_clear(client, site, conn):
-    magento(site, CATALOG, token_required="tok-123")
+    magento(site, CATALOG)
     signup(client)
-    r = client.put("/api/store", json={"url": site.base})
-    assert r.status_code == 400 and "isn't authorized" in r.json()["error"]
+    r = client.put("/api/store", json={"url": site.base + "/nothing-here"})
+    assert r.status_code == 400 and "Couldn't read the store's catalog API" in r.json()["error"]
     r = client.put("/api/store", json={"url": site.base, "token": "tok-123"})
     assert r.status_code == 200 and r.json()["store"]["hasToken"] is True and "tok-123" not in r.text
     stored = conn.execute("select token_encrypted from magento_connections mc join projects p on p.id = mc.project_id "
@@ -96,15 +97,16 @@ def test_the_token_is_encrypted_never_returned_and_errors_are_clear(client, site
 
 
 def test_store_settings_can_change_without_reconnecting(client, site, conn):
-    magento(site, CATALOG, token_required="tok-2")
+    magento(site, CATALOG)
     signup(client)
     assert client.patch("/api/store", json={"cron": "0 5 * * *"}).status_code == 404  # nothing connected yet
     client.put("/api/store", json={"url": site.base, "token": "tok-2"})
     r = client.patch("/api/store", json={"cron": "30 4 * * *", "enabled": False})
     assert r.status_code == 200 and (r.json()["store"]["cron"], r.json()["store"]["enabled"]) == ("30 4 * * *", False)
-    r = client.patch("/api/store", json={"token": "wrong"})
-    assert r.status_code == 400 and "isn't authorized" in r.json()["error"]
-    assert client.get("/api/store").json()["store"]["hasToken"] is True  # a failed change keeps the old token
+    assert client.patch("/api/store", json={"token": ""}).json()["store"]["hasToken"] is False
+    assert client.patch("/api/store", json={"token": "tok-3"}).json()["store"]["hasToken"] is True
+    r = client.patch("/api/store", json={"storeCode": "default"})
+    assert r.status_code == 200 and r.json()["store"]["hasToken"] is True  # left out: the token is kept
     assert client.patch("/api/store", json={"cron": "every hour"}).status_code == 400
     r = client.patch("/api/store", json={"enabled": True, "storeCode": "default"})
     assert r.json()["store"]["enabled"] is True and r.json()["store"]["syncing"] is True

@@ -179,9 +179,10 @@ def store_events(conn, site_id: int, run_id: int | None, events: list[dict], pro
     return ids
 
 
-def record_product(conn, site_id: int, run_id: int, item: dict, *, now: datetime, window_start: datetime,
-                   prev_full_coverage: bool) -> list[dict]:
-    """Upsert one product read by a crawl, append price history if it changed, store and return its events."""
+def record_product(conn, site_id: int, run_id: int | None, item: dict, *, now: datetime, window_start: datetime,
+                   prev_full_coverage: bool, user_id: int | None = None) -> list[dict]:
+    """Upsert one product read by a crawl (or changed by a person: user_id, no run), append price history if it
+    changed, store and return its events."""
     products = table(site_id, "products")
     old = conn.execute(sql.SQL("select * from {} where url=%s").format(products), (item["url"],)).fetchone()
     events = product_events(old, item, now=now, window_start=window_start, prev_full_coverage=prev_full_coverage)
@@ -207,7 +208,7 @@ def record_product(conn, site_id: int, run_id: int, item: dict, *, now: datetime
                 "insert into {} (product_id, run_id, price, compare_at_price, in_stock, hash, seen_at) "
                 "values (%s,%s,%s,%s,%s,%s,%s)").format(table(site_id, "price_history")),
                 (pid, run_id, p.get("price"), p.get("compare_at_price"), p.get("in_stock"), h, now))
-        ids = store_events(conn, site_id, run_id, events, pid, product={**p, "url": item["url"]})
+        ids = store_events(conn, site_id, run_id, events, pid, user_id=user_id, product={**p, "url": item["url"]})
     return [{**e, "id": i, "product_id": pid} for e, i in zip(events, ids, strict=True)]
 
 

@@ -1,10 +1,11 @@
-# RivalWatch backend: milestones M0–M6 and how the UI integrates
+# RivalWatch backend: milestones M0–M7 and how the UI integrates
 
 Date: 2026-10-09 · Code: `backend/` · Detailed design: `docs/superpowers/specs/` · Backend runbook: `backend/README.md`
 
 **In one line:** the Python backend now serves the UI's own `/api/*` contract (same paths and shapes as `server.js`)
 and the `public/` pages, so **the current UI runs against it unchanged**. On top of that it adds real crawling,
-per-website change history, competitor settings, product search with jewellery filters, and our own Magento store.
+per-website change history, competitor settings, product search with jewellery filters, our own Magento store,
+price comparison with an AI digest, and changing our own prices in Magento.
 
 ---
 
@@ -87,7 +88,32 @@ per-website change history, competitor settings, product search with jewellery f
 - Real run: louped (1,462 products, USD) against missoma.com (GBP, rate 1.27): digest written in 2 s, all actions with
   real evidence.
 
-**Tests**: 167 (unit, integration against Postgres, crawl agent with fake models, UI API end to end). The UI team's own
+### M7: Changing our prices in Magento
+- **Request, then apply.** A price change is first *requested*: nothing changes in Magento yet. The answer is a
+  **preview**: the live price and cost read from Magento, change %, margin before/after, and where the new price puts us
+  against competitors (the medians for that jewellery type, and the same product where a competitor sells it). It is made
+  real by a separate **apply**.
+- **Magento first.** Applying re-reads the live price and cost, re-checks the guardrails and writes the price through
+  Magento's price API (`POST /rest/V1/products/base-prices`: only the price changes, nothing else on the product). Only when
+  Magento confirms is our copy updated and the change logged in our store's history under the person who applied it. If
+  Magento refuses, nothing changes anywhere: the change is `failed` with Magento's own error.
+- **Guardrails** per workspace: one change may move a price at most `maxChangePct` (default 50%, catches typos like an
+  extra zero); the margin over cost must stay at least `minMarginPct` (default 0 = never below cost; checked when Magento
+  has a cost); with `adminOnly`, only the agency (an admin) applies a client's changes, and the client's requests wait for
+  them.
+- **Revert**: one call puts back the price a change replaced, as a change of its own.
+- **Audit**: every change keeps who requested it, who applied it, old and new price, status and Magento's error.
+- What changes is the **regular** (base) price at the default scope. A sale price stays in place (the preview warns).
+- **Needs**, in the Magento admin: (1) System → Integrations → the integration → API: **Catalog → Inventory → Products**;
+  (2) Stores → Configuration → Services → OAuth → Consumer Settings: **Allow OAuth Access Tokens to be used as standalone
+  Bearer tokens = Yes** (Magento 2.4.4+). Checked on louped (read-only call): today its token gets
+  `401 The consumer isn't authorized to access Magento_Catalog::catalog`, so requests work with the last synced price
+  and applying returns that error until both are set.
+- The token is now used **only** for the price APIs. The catalog sync never sends it: louped's GraphQL fails any query that
+  carries an integration token ("Composite reader could not read a token"), and the catalog is public anyway.
+
+**Tests**: 173 (unit, integration against Postgres, crawl agent with fake models, UI API end to end, a stand-in
+Magento for the price APIs). The UI team's own
 suite (`integration/backend.integration.mjs`) passes 53 of 54 checks; the one difference is intended (see Part C).
 
 ---
@@ -216,13 +242,13 @@ Settings (all optional; empty = server default):
 |---|---|---|
 | `GET /api/store` | | `{store: null}` or `{store: Store}` |
 | `PUT /api/store` | `{url, storeCode?, token?, cron?}` | `{store}`; checks the store answers, then the first sync starts · 400 with the store's own error (e.g. not a Magento store, unauthorized) |
-| `PATCH /api/store` | `{storeCode?, token?, cron?, enabled?}` | `{store}`; change settings without reconnecting. `token: ""`/`null` removes it, leaving it out keeps it; a new store view or token is tested first (400 keeps the old one); `enabled: false` pauses the sync |
+| `PATCH /api/store` | `{storeCode?, token?, cron?, enabled?}` | `{store}`; change settings without reconnecting. `token: ""`/`null` removes it, leaving it out keeps it; a new store view is tested first (400 keeps the old one); the token is checked when it's first used (price changes); `enabled: false` pauses the sync |
 | `POST /api/store/sync` | `{}` | `{queued, store}` · 404 when no store is connected |
 | `DELETE /api/store` | `{}` | `{ok: true}`; its synced data is deleted |
 
 `Store` = `{id, platform: "magento", url, name, storeCode, currency, hasToken, enabled, status: "connected"|"error", error,
 syncing, productCount, lastSync, lastSummary, cron, nextSync}`. Any Magento store works; each account connects its own.
-The token is optional (the public catalog needs none), stored encrypted and never returned.
+The token is optional: only price changes (M7) use it, the catalog is read without it. Stored encrypted, never returned.
 Our store's products: `GET /api/products?competitor=ours` (same filters and facets as below).
 
 #### ★ Product search (the jewellery filters)
@@ -261,6 +287,30 @@ Our store's products: `GET /api/products?competitor=ours` (same filters and face
 action has `evidence` (ids such as `e:752-15` for a change, `p:3` for a positioning row, `s:<sku>` for a shared SKU).
 `POST /api/reports/summary` uses the analyst when Gemini is configured.
 
+#### ★ Our prices in Magento (M7)
+| Call | Body | Answer |
+|---|---|---|
+| `GET /api/prices?status=` | | `{changes: [Change], settings}`; `status`: `pending` · `applied` · `failed` · `cancelled` |
+| `POST /api/prices` | `{sku, newPrice}` | `{change, preview}`; a pending change (replaces an earlier pending one for that SKU) · 400 guardrail (message says which) · 404 SKU not in our catalog / no store |
+| `POST /api/prices/{id}/apply` | `{}` | `{change}` applied · 502 Magento refused (change is `failed`, nothing changed) · 403 only the agency applies · 409 not pending |
+| `POST /api/prices/{id}/cancel` | `{}` | `{change}` · 404 when it isn't pending |
+| `POST /api/prices/{id}/revert` | `{}` | `{change, preview}`: puts the old price back (applied at once, or pending when only the agency applies) |
+| `GET /api/prices/settings` | | `{maxChangePct, minMarginPct, adminOnly}` |
+| `PATCH /api/prices/settings` | `{maxChangePct?, minMarginPct?}` | the settings · 403 when the agency applies changes (`adminOnly`) |
+
+```
+Change  = {id, sku, title, url, currency, oldPrice, newPrice, changePct, status, error, requestedBy, appliedBy, client,
+           reverts, createdAt, appliedAt}
+preview = {currentPrice, newPrice, changePct, priceSource: "magento" | "catalog", salePrice, shownBefore, shownAfter,
+           cost, marginBefore, marginAfter, canApply, settings, warnings: [...],
+           position: {type: "engagement ring", competitors: [{name, median, gapBefore, gapAfter}],
+                      sameProduct: [{name, price, url, gapBefore, gapAfter}], notes}}
+```
+`priceSource: "catalog"` means Magento's live price couldn't be read (the reason is in `warnings`): the preview uses the
+last synced price, and applying will fail until the token has the permission. `shownAfter` is what shoppers pay (a sale
+price stays). `gapBefore`/`gapAfter` < 0: the competitor is cheaper. Products now include `sku`, so a "Change price"
+button on our store's products page has what it needs.
+
 #### Admin (`/api/admin/*`, admin session only)
 | Call | Body | Answer |
 |---|---|---|
@@ -276,6 +326,10 @@ action has `evidence` (ids such as `e:752-15` for a change, `p:3` for a position
 | `PUT /api/admin/users/{id}/store` | `{url, storeCode?, token?, cron?}` | connect a client's store for them (audited) |
 | `PATCH /api/admin/users/{id}/store` | `{storeCode?, token?, cron?, enabled?}` | change a client's store settings (audited) |
 | `POST /api/admin/users/{id}/store/sync` · `DELETE /api/admin/users/{id}/store` | `{}` | sync now / disconnect (audited) |
+| `GET /api/admin/prices?status=&user_id=` | | `{changes}` of every client (`status=pending`: what waits for the agency; `client` is the owner's email) |
+| `POST /api/admin/users/{id}/prices` | `{sku, newPrice}` | `{change, preview}`: request a change for a client (audited) |
+| `POST /api/admin/prices/{changeId}/apply` · `/cancel` · `/revert` | `{}` | as the client calls, for any client (audited) |
+| `GET` · `PATCH /api/admin/users/{id}/prices/settings` | `{maxChangePct?, minMarginPct?, adminOnly?}` | a client's guardrails; `adminOnly: true` makes the agency the one who applies (audited) |
 
 #### Crawl API for API-key users (unchanged contract)
 `/v1/credits/balance`, `/v1/web/scrape`, `/v1/web/crawl`, `/v1/web/crawl/{job_id}`. Scrape results now include
@@ -295,6 +349,10 @@ action has `evidence` (ids such as `e:752-15` for a change, `p:3` for a position
    (`onlyCompetitors`), shared-SKU matches, a group-by switch, and a settings form (minimum price, currency rates).
 6. Show the new change types (`on_sale`, stock, `new_category`, `product_updated`, `page_changed`); their `label` is
    ready to display.
+7. **Change price** (our store's products and the comparison's shared SKUs): a form for the new price, then the preview
+   (margin, change %, position against competitors, warnings) with "Apply" / "Cancel"; a **price changes** list with
+   status, who requested/applied, errors and "Revert"; a guardrails form. On the admin side: a "waiting for approval" list
+   (`GET /api/admin/prices?status=pending`) and the `adminOnly` switch on the client's page.
 
 ---
 
@@ -315,5 +373,4 @@ action has `evidence` (ids such as `e:752-15` for a change, `p:3` for a position
 
 | Milestone | What |
 |---|---|
-| M7 | Applying a price change in Magento, with approval, a minimum-margin guard and an audit log (needs the Magento integration's Catalog → Products permission) |
 | M8 | Production readiness: no public database port, secrets, rate limits stored in the database, backups, CI, deployment |

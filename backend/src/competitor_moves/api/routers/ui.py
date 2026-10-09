@@ -7,6 +7,7 @@ import re
 import secrets
 import time
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from psycopg.types.json import Jsonb
@@ -19,7 +20,7 @@ from ...core.plans import ANNUAL_DISCOUNT, PLANS
 from ...core.security import DUMMY_HASH, TTL, hash_password, verify_password
 from ...db.pool import get_conn
 from ...db.repositories import users
-from ...services import comparison, dashboard, sessions, store_sync, workspaces
+from ...services import comparison, dashboard, pricing, sessions, store_sync, workspaces
 from ...services.product_search import SORT_SQL, Filters, search
 from ..deps import authenticate
 from ..schemas.auth import no_control_chars
@@ -40,24 +41,6 @@ def json_only(request: Request) -> None:
 
 
 router = APIRouter(prefix="/api", tags=["ui"], dependencies=[Depends(json_only)])
-
-
-class Limiter:
-    """Login/signup attempts per IP+email. ponytail: in-process, so per worker; use Redis if the API scales out."""
-
-    def __init__(self, max_hits: int = 10, window_sec: int = 300):
-        self.max, self.window, self.hits = max_hits, window_sec, defaultdict(list)
-
-    def hit(self, key: str) -> bool:
-        now = time.monotonic()
-        self.hits[key] = [t for t in self.hits[key] if now - t < self.window] + [now]
-        return len(self.hits[key]) <= self.max
-
-    def reset(self, key: str) -> None:
-        self.hits.pop(key, None)
-
-
-limiter = Limiter()
 
 
 # ---- session helpers ------------------------------------------------------------------------------------------
@@ -107,13 +90,7 @@ class LoginBody(BaseModel):
     email: str = Field("", max_length=254)
     password: str = Field("", max_length=128)
 
-    @field_validator("email", "password")
-    @classmethod
-    def _no_control_chars(cls, v: str) -> str:
-        # a NUL byte makes Postgres raise a DataError (a 500); other control characters are never legitimate here
-        if re.search(r"[\x00-\x1f\x7f]", v):
-            raise ValueError("contains invalid characters")
-        return v
+    _clean = field_validator("email", "password")(no_control_chars)  # a NUL byte would be a Postgres 500
 
 
 class SignupBody(LoginBody):
@@ -134,10 +111,6 @@ def plans():
     return {"plans": list(PLANS.values()), "annualDiscount": ANNUAL_DISCOUNT, "demo": {"user": None, "admin": None},
             "backend": {"enabled": True, "demo": False, "signupName": True, "planChanges": True, "rotateKey": True,
                         "adminPlanEdit": True, "adminRoleEdit": False, "adminResetCredits": True, "adminResetPassword": True}}
-
-
-def _rate_key(request: Request, email: str) -> str:
-    return f"{request.client.host if request.client else '?'}|{email.strip().lower()}"
 
 
 def _ip(request: Request) -> str | None:
@@ -172,7 +145,6 @@ def login(body: LoginBody, request: Request, response: Response, conn=Depends(ge
     ratelimit.logins.clear(key)
     if not row["is_active"]:
         raise UiError(403, "This account is suspended. Contact support.")
-    limiter.reset(_rate_key(request, body.email))  # only failures count towards the limit
     return _signed_in(conn, request, response, row)
 
 
@@ -477,6 +449,75 @@ def patch_compare_settings(body: CompareSettings, u=Depends(ui_user), conn=Depen
         current["fx_rates"] = rates
     conn.execute("update projects set compare_settings=%s where id=%s", (Jsonb(current), project["id"]))
     return comparison.settings_of({**project, "compare_settings": current})
+
+
+# ---- our prices in Magento (M7) -------------------------------------------------------------------------------
+
+class PriceBody(BaseModel):
+    sku: str = Field(min_length=1, max_length=64)
+    newPrice: Decimal = Field(gt=0, lt=10_000_000, decimal_places=2)
+
+
+class PriceSettings(BaseModel):
+    maxChangePct: float | None = Field(None, gt=0, le=1000)
+    minMarginPct: float | None = Field(None, ge=0, lt=100)
+
+
+def priced(fn, *args, **kw):
+    """Call a pricing service function, turning its errors into the UI's {"error"} responses."""
+    try:
+        return fn(*args, **kw)
+    except workspaces.WorkspaceError as e:
+        raise UiError(e.status, str(e)) from None
+
+
+PRICE_STATUS = Query(None, pattern="^(pending|applied|failed|cancelled)$")
+
+
+@router.get("/prices")
+def list_prices(status: str | None = PRICE_STATUS, u=Depends(ui_user), conn=Depends(get_conn)):
+    """Price changes for our store, newest first, and the guardrails that apply."""
+    project = workspaces.get_or_create(conn, u)
+    return {"changes": pricing.list_changes(conn, project_id=project["id"], status=status),
+            "settings": pricing.settings_of(project)}
+
+
+@router.post("/prices")
+def request_price(body: PriceBody, u=Depends(ui_user), conn=Depends(get_conn)):
+    """Ask for a new regular price for one of our SKUs. Nothing changes in Magento yet: the change is pending and comes
+    back with a preview (live price and cost, margin, where it puts us against competitors). Apply it to make it real."""
+    project = workspaces.get_or_create(conn, u)
+    return priced(pricing.request, conn, project, u, body.sku.strip(), body.newPrice)
+
+
+@router.post("/prices/{change_id}/apply")
+def apply_price(change_id: int, u=Depends(ui_user), conn=Depends(get_conn)):
+    """Write the price to Magento. 502 (and status failed) if Magento refuses: then nothing changed anywhere."""
+    return {"change": priced(pricing.apply, conn, workspaces.get_or_create(conn, u), change_id, u)}
+
+
+@router.post("/prices/{change_id}/cancel")
+def cancel_price(change_id: int, u=Depends(ui_user), conn=Depends(get_conn)):
+    return {"change": priced(pricing.cancel, conn, workspaces.get_or_create(conn, u), change_id)}
+
+
+@router.post("/prices/{change_id}/revert")
+def revert_price(change_id: int, u=Depends(ui_user), conn=Depends(get_conn)):
+    """Put back the price an applied change replaced (a new change, applied at once unless only the agency applies)."""
+    return priced(pricing.revert, conn, workspaces.get_or_create(conn, u), change_id, u)
+
+
+@router.get("/prices/settings")
+def get_price_settings(u=Depends(ui_user), conn=Depends(get_conn)):
+    return pricing.settings_of(workspaces.get_or_create(conn, u))
+
+
+@router.patch("/prices/settings")
+def patch_price_settings(body: PriceSettings, u=Depends(ui_user), conn=Depends(get_conn)):
+    """maxChangePct: the most one change may move a price; minMarginPct: the lowest margin over cost allowed (when
+    Magento has a cost). Locked when the agency applies changes for this store (adminOnly)."""
+    return priced(pricing.update_settings, conn, workspaces.get_or_create(conn, u), u,
+                  max_change_pct=body.maxChangePct, min_margin_pct=body.minMarginPct)
 
 
 @router.get("/products")

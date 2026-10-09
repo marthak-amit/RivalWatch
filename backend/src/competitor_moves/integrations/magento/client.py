@@ -1,15 +1,19 @@
-"""Read our own Magento store through its GraphQL API (GET queries, so every call goes through the SSRF-guarded fetcher).
+"""Our own Magento store: the catalog is read through GraphQL (GET queries, through the SSRF-guarded fetcher), prices
+are read and changed through the price REST APIs (the only writes).
 
-Public catalog data needs no token; an integration token (if given) is sent as a Bearer header, and `store_code`
-selects the store view.
+The catalog is public, so GraphQL never gets the token: Magento 2.4.4+ rejects an integration token sent as a Bearer to
+GraphQL ("Composite reader could not read a token") unless the store allows it. The integration token is only for the
+price APIs. `store_code` selects the store view.
 """
 import json
+import re
 from datetime import UTC, datetime
+from decimal import Decimal
 from urllib.parse import urlencode
 
 from ...crawler import attributes
 from ...crawler.extract import to_decimal
-from ...crawler.fetch import Page, fetch
+from ...crawler.fetch import Page, fetch, send
 
 PAGE_SIZE = 100
 STORE_QUERY = "{ storeConfig { store_name base_currency_code base_url product_url_suffix } }"
@@ -28,9 +32,7 @@ class MagentoClient:
     def __init__(self, base_url: str, *, user_agent: str, store_code: str = "default", token: str | None = None,
                  timeout: float = 30):
         self.base = base_url.rstrip("/")
-        self.headers = {"Store": store_code or "default"}
-        if token:
-            self.headers["Authorization"] = f"Bearer {token}"
+        self.headers, self.token = {"Store": store_code or "default"}, token
         self.user_agent, self.timeout, self.requests = user_agent, timeout, 0
 
     def _query(self, query: str, variables: dict | None = None) -> dict:
@@ -57,6 +59,48 @@ class MagentoClient:
         """(items, total_count, total_pages) for one page."""
         p = self._query(PRODUCTS_QUERY, {"page": page, "size": size})["products"]
         return p["items"] or [], p["total_count"], p["page_info"]["total_pages"]
+
+    # ---- prices: Magento's price REST APIs (the token needs Catalog → Inventory → Products) -------------------------
+
+    def _rest(self, path: str, body: dict):
+        if not self.token:
+            raise MagentoError("changing prices needs an integration token on the store connection")
+        page = send(f"{self.base}/rest/V1/{path}", body, user_agent=self.user_agent, timeout=self.timeout,
+                    headers={"Authorization": f"Bearer {self.token}"})
+        self.requests += 1
+        try:
+            data = json.loads(page.body)
+        except ValueError:
+            raise MagentoError(f"not a Magento REST endpoint (HTTP {page.status})") from None
+        if page.status != 200:
+            raise MagentoError(f"HTTP {page.status}: {_message(data)}")
+        return data
+
+    def price_info(self, sku: str) -> tuple[Decimal | None, Decimal | None]:
+        """(base price, cost) at the default scope (store_id 0); cost is None when the product has none."""
+        def pick(rows, field):
+            rows = rows if isinstance(rows, list) else []
+            row = next((r for r in rows if r.get("store_id") == 0), rows[0] if rows else None)
+            return to_decimal(row.get(field)) if row else None
+        return (pick(self._rest("products/base-prices-information", {"skus": [sku]}), "price"),
+                pick(self._rest("products/cost-information", {"skus": [sku]}), "cost"))
+
+    def set_price(self, sku: str, price: Decimal) -> None:
+        """Set the base (regular) price at the default scope. Only the price changes; a sale price stays."""
+        errors = self._rest("products/base-prices", {"prices": [{"sku": sku, "price": float(price), "store_id": 0}]})
+        if errors:
+            raise MagentoError("; ".join(_message(e) for e in errors)[:300])
+
+
+def _message(data) -> str:
+    """Magento's error text with its %placeholders filled in."""
+    if not isinstance(data, dict):
+        return str(data)[:300]
+    msg, params = str(data.get("message") or data), data.get("parameters") or {}
+    if isinstance(params, dict):  # {"resources": "..."} fills %resources
+        return re.sub(r"%(\w+)", lambda m: str(params.get(m[1], m[0])), msg)[:300]
+    values = iter(params)  # a list fills the placeholders in order, whatever their names (%1, %sku, ...)
+    return re.sub(r"%\w+", lambda m: str(next(values, m[0])), msg)[:300]
 
 
 def _when(v: str | None) -> datetime | None:

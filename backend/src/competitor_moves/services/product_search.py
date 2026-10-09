@@ -76,12 +76,12 @@ def search(conn, sites: list[dict], f: Filters, *, limit: int = 50, offset: int 
         t = table(s["id"], "products")
         total += conn.execute(sql.SQL("select count(*) as n from {} where {}").format(t, where), args).fetchone()["n"]
         for r in conn.execute(sql.SQL(
-                "select id, title, url, path, price, compare_at_price, currency, in_stock, category, attributes, image, "
+                "select id, sku, title, url, path, price, compare_at_price, currency, in_stock, category, attributes, image, "
                 "meta_title, source_date, first_seen_at, last_seen_at from {} where {} order by {} limit %s").format(t, where, order),
                 [*args, offset + limit]).fetchall():
             was = r["compare_at_price"] if r["compare_at_price"] and r["price"] is not None and r["compare_at_price"] > r["price"] else None
             rows.append({
-                "competitorId": str(s["id"]), "competitor": s["name"] or s["domain"], "title": r["title"], "url": r["url"],
+                "competitorId": str(s["id"]), "competitor": s["name"] or s["domain"], "sku": r["sku"], "title": r["title"], "url": r["url"],
                 "path": r["path"], "price": float(r["price"]) if r["price"] is not None else None,
                 "priceLabel": money(r["price"], r["currency"]), "wasPrice": money(was, r["currency"]),
                 "discountPct": round(float((was - r["price"]) / was * 100), 1) if was else None, "currency": r["currency"],

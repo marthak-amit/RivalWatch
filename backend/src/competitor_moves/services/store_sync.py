@@ -24,7 +24,7 @@ class StoreError(workspaces.WorkspaceError):
     pass
 
 
-def _client(conn_row: dict) -> MagentoClient:
+def magento_client(conn_row: dict) -> MagentoClient:
     token = crypto.decrypt(conn_row["token_encrypted"]) if conn_row["token_encrypted"] else None
     return MagentoClient(conn_row["base_url"], user_agent=get_settings().user_agent, store_code=conn_row["store_code"],
                          token=token)
@@ -54,7 +54,7 @@ def connect(conn, user: dict, url: str, *, store_code: str | None = None, token:
         token_enc = None
     probe = {"base_url": base, "store_code": (store_code or "default").strip()[:40] or "default", "token_encrypted": token_enc}
     try:
-        info = _client(probe).store()
+        info = magento_client(probe).store()
     except (MagentoError, FetchError, BlockedURL, crypto.CryptoError) as e:
         raise StoreError(f"Couldn't read the store's catalog API: {e}") from None
     with conn.transaction():
@@ -102,7 +102,7 @@ def update(conn, user: dict, *, store_code: str | None = None, token=_KEEP, cron
         new_token = store["token_encrypted"] if token is _KEEP else (crypto.encrypt(token) if token else None)
         probe = {"base_url": store["base_url"], "store_code": new_code, "token_encrypted": new_token}
         try:
-            info = _client(probe).store()
+            info = magento_client(probe).store()
         except (MagentoError, FetchError, BlockedURL, crypto.CryptoError) as e:
             raise StoreError(f"Couldn't read the store's catalog API with these settings: {e}") from None
         conn.execute("update magento_connections set store_code=%s, token_encrypted=%s, currency=%s, updated_at=now() "
@@ -148,7 +148,7 @@ def run_sync(conn, site_id: int) -> dict:
     run_id = site_data.start_run(conn, site_id, "sync")
     client, seen, events, total, complete, error = None, set(), [], None, False, None
     try:
-        client = _client(store)
+        client = magento_client(store)
         page, pages = 1, 1
         while page <= min(pages, MAX_PAGES):
             items, total, pages = client.products(page)

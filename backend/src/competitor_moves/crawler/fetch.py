@@ -70,6 +70,19 @@ def fetch(url: str, *, user_agent: str, timeout: float = 20, retries: int = 2, m
     raise FetchError("too many redirects")
 
 
+def send(url: str, body, *, user_agent: str, timeout: float = 30, headers: dict[str, str] | None = None) -> Page:
+    """One JSON POST to an API: SSRF-checked, never redirected and never retried (a write must not run twice)."""
+    check_url(url)
+    try:
+        r = curl.post(url, json=body, timeout=timeout, allow_redirects=False, impersonate=IMPERSONATE,
+                      headers={"User-Agent": user_agent, "Accept": "application/json", "Content-Type": "application/json",
+                               **(headers or {})})
+    except RequestException as e:
+        raise FetchError(str(e).split(". See ")[0][:200]) from None
+    return Page(url=url, status=r.status_code, headers={k.lower(): v for k, v in r.headers.items()},
+                body=bytes(r.content[:1_000_000]))
+
+
 def _get(url: str, timeout: float, retries: int, headers: dict[str, str]):
     """One request (no redirect following), retried on network errors with a short pause."""
     for attempt in range(retries + 1):

@@ -182,6 +182,7 @@ def _matches(conn, our_rows, their_rows, names, rates, our_cur) -> list[dict]:
             theirs = float(p["price"]) * rate if rate is not None else None
             out.append({"sku": o["sku_norm"], "title": o["title"], "ours": {"price": float(o["price"]), "currency": our_cur, "url": o["url"]},
                         "competitorId": str(cid), "competitor": names[cid],
-                        "theirs": {"price": float(p["price"]), "currency": cur, "url": p["url"]},
+                        "theirs": {"price": float(p["price"]), "currency": cur, "url": p["url"],
+                                   "priceInOurCurrency": round(theirs, 2) if theirs is not None else None},
                         "gapPct": gap_pct(theirs, float(o["price"])) if theirs is not None else None})
     return sorted(out, key=lambda m: m["gapPct"] if m["gapPct"] is not None else 0)

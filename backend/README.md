@@ -35,7 +35,8 @@ docker --context default compose exec db psql -U postgres -d competitor -c \
 ```
 - **api**: FastAPI on port 8000 inside the container, published on 8031. Serves `/user/*`, `/admin/*`, `/v1/*` (crawl
   API, `x-api-key`), `/api/*` (the UI's own API, cookie session) and the UI pages.
-- **worker**: runs queued jobs one at a time: `crawl_site` (the LangGraph crawl agent) and `web_crawl` (`/v1` jobs).
+- **worker**: runs queued jobs one at a time: `crawl_site` (the LangGraph crawl agent), `sync_store` (our Magento
+  catalog), `compare_project` (the digest) and `web_crawl` (`/v1` jobs).
 - **scheduler**: every minute, queues a crawl for each active competitor whose cron time has come (UTC).
 - **migrate**: runs once at start-up (Alembic + every `site_<id>` schema), then exits.
 
@@ -57,9 +58,20 @@ docker --context default compose exec api python scripts/create_admin.py admin@e
 
 ## Our own store (Magento)
 `PUT /api/store {url, storeCode?, token?}` connects a workspace's Magento store. Its catalog is read through Magento's
-GraphQL API (public data needs no token; a token, if given, is stored encrypted with `APP_ENCRYPTION_KEY`), synced on
+GraphQL API (public data, read without the token; the token, used only for price changes, is stored encrypted with
+`APP_ENCRYPTION_KEY`), synced on
 the store's own cron by the scheduler (`sync_store` jobs), and stored in its own `site_<id>` schema with the same change
 history as competitors. louped.btdemo.biz: 1,462 products in ~17 s.
+
+### Changing our prices
+`POST /api/prices {sku, newPrice}` requests a change and answers with a preview (live price and cost from Magento,
+margin, where it puts us against competitors); `POST /api/prices/{id}/apply` writes it. Magento is written first
+(`POST /rest/V1/products/base-prices`, the regular price at the default scope); only when it confirms is our copy and
+history updated, and a refusal changes nothing (the change is `failed` with Magento's error). Guardrails per workspace:
+`maxChangePct` (50), `minMarginPct` (0 = never below cost), `adminOnly` (only an admin applies). Every change is in
+`price_changes`. Writing needs, in the Magento admin: the integration's API access to **Catalog → Inventory → Products**
+(System → Integrations), and **Allow OAuth Access Tokens to be used as standalone Bearer tokens = Yes** (Stores →
+Configuration → Services → OAuth → Consumer Settings; Magento 2.4.4+).
 
 ## Crawl settings
 Server defaults come from `.env`; each competitor can override them (`PATCH /api/competitors/{id}` with
@@ -94,11 +106,14 @@ export DATABASE_URL=postgresql://postgres:postgres@localhost:5433/competitor BRO
 .venv/bin/python -m competitor_moves.workers.worker
 .venv/bin/python -m competitor_moves.workers.scheduler
 ```
-Tests: `.venv/bin/python -m pytest` (needs the dev database; never calls the real Gemini) · lint: `.venv/bin/ruff check .`
+Tests: `.venv/bin/python -m pytest` (needs the compose Postgres; uses its own database `competitor_test`, created and
+migrated on first run, so it never touches `competitor` or races the compose worker; never calls the real Gemini) ·
+lint: `.venv/bin/ruff check .`
 
 ## Data layout
-`public`: users, sessions, projects (one workspace per user), sites (competitors and their settings), moves, jobs,
-price_changes, audit_log.
+`public`: users, sessions, projects (one workspace per user, with its comparison settings and price guardrails), sites
+(our store and competitors, with their settings), magento_connections, moves, jobs, digests, price_changes (every price
+change: requested by, applied by, old/new price, status, Magento's error), audit_log.
 Each website gets its own schema `site_<id>`: `products` (with source page, path, currency and the page's meta tags),
 `price_history`, `crawl_runs`, `pages` and `history` (every change ever detected, linked to its crawl run, its product
 and, for changes a person made, the user).
