@@ -173,6 +173,13 @@ http.createServer(async (req, res) => {
         return send(res, 200, { ok: true });
       }
       const dc = p.match(/^\/api\/competitors\/(\w+)$/);
+      if (dc && M === 'PATCH') {
+        const { enabled } = await readJson(req);
+        if (typeof enabled !== 'boolean') return fail(res, 400, '`enabled` must be true or false');
+        if (!ws.monitor.setEnabled(dc[1], enabled)) return fail(res, 404, 'Competitor not found');
+        if (enabled) ws.monitor.run([dc[1]]).catch(() => {}); // catch up on anything that changed while paused
+        return send(res, 200, { ok: true, enabled });
+      }
       if (dc && M === 'DELETE') { ws.monitor.remove(dc[1]); return send(res, 200, { ok: true }); }
       if (p === '/api/reports' && M === 'GET') {
         return send(res, 200, buildReport(ws.monitor.state, url.searchParams.get('period') === 'month' ? 'month' : 'week', undefined, cleanId(url.searchParams.get('competitor'))));

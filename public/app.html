@@ -83,6 +83,15 @@
   .chip { font:inherit; font-weight:600; font-size:13px; padding:5px 12px; border-radius:99px; border:1px solid var(--line); background:var(--card); color:var(--mute); cursor:pointer; }
   .chip:hover { border-color:var(--acc); color:var(--ink); } .chip[aria-pressed=true] { background:var(--acc-soft); border-color:var(--acc); color:var(--acc); }
   .cstats { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:14px 0; } .cstats div { background:var(--bg); border-radius:10px; padding:8px 4px; text-align:center; } .cstats b { display:block; font-size:18px; line-height:1.2; } .cstats span { font-size:11px; }
+  /* enable/disable switch: green = on, red = off */
+  .switch { display:inline-flex; align-items:center; gap:8px; background:none; border:0; padding:2px; cursor:pointer; font:inherit; font-size:13px; font-weight:700; border-radius:99px; color:inherit; white-space:nowrap; }
+  .switch .tr { position:relative; width:40px; height:22px; border-radius:99px; background:var(--bad); transition:background .2s; flex:none; }
+  .switch .tr::after { content:""; position:absolute; top:3px; left:3px; width:16px; height:16px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.35); transition:transform .2s; }
+  .switch[aria-checked=true] .tr { background:var(--good); } .switch[aria-checked=true] .tr::after { transform:translateX(18px); }
+  .switch .lb { color:#b42318; } .switch[aria-checked=true] .lb { color:#05603a; } .switch.err .lb { color:#b42318; }
+  @media (prefers-color-scheme: dark) { .switch .lb, .switch.err .lb { color:#fda29b; } .switch[aria-checked=true] .lb { color:#6ce9a6; } }
+  .switch[aria-busy=true] { opacity:.6; pointer-events:none; }
+  .dim { opacity:.5; filter:grayscale(.7); transition:opacity .2s; }
   .clamp { display:-webkit-box; -webkit-line-clamp:3; line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
   .kv { display:grid; grid-template-columns:104px 1fr; gap:8px; padding:6px 0; border-top:1px solid var(--line); font-size:13px; } .kv .k { color:var(--mute); } .kv .v2 { display:flex; flex-wrap:wrap; gap:6px; align-items:center; min-width:0; overflow-wrap:anywhere; }
   a.chip { text-decoration:none; padding:2px 10px; font-size:12px; }
@@ -265,7 +274,7 @@ function overviewAll(w) {
   const rows = S.competitors.map((c) => {
     const snap = c.snapshot, n = w.byCompetitor.find((x) => x.id === c.id), last = S.changes.find((x) => x.competitorId === c.id);
     return el('tr', { class: 'go', tabindex: 0, onclick: () => setComp(c.id), onkeydown: (e) => e.key === 'Enter' && setComp(c.id) },
-      el('td', {}, el('b', {}, c.name), c.error && el('div', { class: 'err' }, c.error)), el('td', { class: 'n' }, snap ? Object.keys(snap.products).length : '–'), el('td', { class: 'n' }, snap ? priceRange(snap) : '–'),
+      el('td', {}, el('b', {}, c.name), !c.enabled && el('span', { class: 'pill bad', style: 'margin-left:8px' }, 'Disabled'), c.enabled && c.error && el('div', { class: 'err' }, c.error)), el('td', { class: 'n' }, snap ? Object.keys(snap.products).length : '–'), el('td', { class: 'n' }, snap ? priceRange(snap) : '–'),
       el('td', { class: 'n' }, snap ? snap.promotions.length : '–'), el('td', { class: 'n' }, snap ? snap.pages.length : '–'), el('td', { class: 'n' }, n ? n.total : 0),
       el('td', { class: 'n' }, last ? ago(last.ts) : '–'), el('td', {}, el('span', { class: 'linkbtn' }, 'View →')));
   });
@@ -316,6 +325,16 @@ function compStats(c) {
   const mine = S.changes.filter((x) => x.competitorId === c.id), now = Date.now();
   return { mine, week: mine.filter((x) => now - Date.parse(x.ts) < 7 * DAY).length, month: mine.filter((x) => now - Date.parse(x.ts) < 30 * DAY).length, last: mine[0] };
 }
+async function toggleComp(c, e) {
+  const btn = e.currentTarget; btn.setAttribute('aria-busy', 'true');
+  try { await api('/api/competitors/' + c.id, { method: 'PATCH', body: { enabled: !c.enabled } }); toast(`${c.name} ${c.enabled ? 'disabled: it will no longer be crawled' : 'enabled: checking now'}`); await refresh(true); if (!c.enabled) setTimeout(() => refresh(true), 1500); }
+  catch (x) { toast(x.message); btn.removeAttribute('aria-busy'); }
+}
+function statusSwitch(c) {
+  const bad = c.enabled && c.error, label = !c.enabled ? 'Disabled' : bad ? 'Error' : c.snapshot ? 'Active' : 'Starting…';
+  return el('button', { class: 'switch' + (bad ? ' err' : ''), role: 'switch', 'aria-checked': String(c.enabled), 'aria-label': `${c.name}: monitoring ${c.enabled ? 'on' : 'off'}`, title: c.enabled ? 'Click to stop monitoring this competitor' : 'Click to resume monitoring', onclick: (e) => toggleComp(c, e) },
+    el('span', { class: 'tr' }), el('span', { class: 'lb' }, label));
+}
 const openComp = (id) => { selComp = id; summary = null; try { sessionStorage.setItem('rw_comp', id); } catch { /* ignore */ } go('overview'); refresh(true); };
 const pageUrl = (c) => { const t = S.testSites.find((x) => x.id === c.site); return t ? t.url + 'pricing' : c.url; };
 const stat = (v, l) => el('div', {}, el('b', {}, String(v)), el('span', { class: 'small mute' }, l));
@@ -347,16 +366,17 @@ function profileBlock(c, full) {
 
 function compCard(c) {
   const snap = c.snapshot, prods = snap ? Object.values(snap.products) : [], st = compStats(c);
-  const [tone, status] = c.error ? ['bad', 'Error'] : snap ? ['good', 'Healthy'] : ['', 'Pending'];
   return el('div', { class: 'card', style: 'display:flex;flex-direction:column' },
     el('div', { class: 'row between' },
       el('div', { style: 'min-width:0' }, el('b', { style: 'font-size:16px' }, c.name),
         el('div', { class: 'small mute', style: 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap' }, (c.site ? 'Demo site' : hostOf(c.url)) + ' · ' + (snap ? 'checked ' + ago(snap.ts) : 'baseline pending'))),
-      el('span', { class: 'pill ' + tone }, status)),
-    c.error && el('div', { class: 'err', style: 'margin-top:6px' }, c.error),
+      statusSwitch(c)),
+    c.enabled && c.error && el('div', { class: 'err', style: 'margin-top:6px' }, c.error),
+    !c.enabled && el('div', { class: 'small', style: 'margin-top:6px;color:var(--bad)' }, 'Monitoring is off. This competitor is not crawled and uses no credits.'),
+    el('div', { class: c.enabled ? '' : 'dim' },
     el('div', { class: 'cstats' }, stat(prods.length, 'Products'), stat(snap ? snap.pages.length : '–', 'Pages'), stat(snap ? snap.promotions.length : '–', 'Promos'), stat(st.week, 'Changes 7d')),
     profileBlock(c, false),
-    snap && snap.promotions.length ? el('div', { style: 'margin-top:12px' }, el('div', { class: 'h-sec' }, 'Active promotions'), snap.promotions.map((x) => el('div', { class: 'small', style: 'margin-bottom:4px' }, '🏷 ' + x))) : null,
+    snap && snap.promotions.length ? el('div', { style: 'margin-top:12px' }, el('div', { class: 'h-sec' }, 'Active promotions'), snap.promotions.map((x) => el('div', { class: 'small', style: 'margin-bottom:4px' }, '🏷 ' + x))) : null),
     el('div', { style: 'flex:1;min-height:12px' }),
     el('div', { class: 'row wrapx', style: 'margin-top:12px' },
       el('button', { class: 'btn sm primary', onclick: () => openComp(c.id) }, 'View details'),
@@ -501,7 +521,7 @@ async function refresh(force) {
   if (selComp && !S.competitors.some((c) => c.id === selComp)) selComp = '';
   const q = '&competitor=' + encodeURIComponent(selComp);
   [ME, R.week, R.month] = await Promise.all([api('/api/me'), api('/api/reports?period=week' + q), api('/api/reports?period=month' + q)]);
-  const next = [selComp, S.runs, S.running, S.changes.length, S.competitors.length, S.credits, S.digest?.ts, ME.plan, S.competitors.map((c) => c.snapshots + (c.error || '')).join()].join('|');
+  const next = [selComp, S.runs, S.running, S.changes.length, S.competitors.length, S.credits, S.digest?.ts, ME.plan, S.competitors.map((c) => c.snapshots + (c.error || '') + c.enabled).join()].join('|');
   const typing = ['cn', 'cu', 'site', 'fType', 'fComp', 'fComp2'].includes(document.activeElement?.id);
   paintShell();
   if (force || (next !== sig && !typing)) { sig = next; paintView(); }
