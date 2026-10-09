@@ -21,11 +21,13 @@ npm test
 | `/` | Marketing site: hero, how it works, features, **pricing** (monthly/annual toggle), FAQ |
 | choose a plan | **2-second loader** → `/login?plan=…` |
 | `/login` | Sign in / create account (plan preselected). Demo buttons fill credentials |
-| `/app` | Customer dashboard: Overview, Competitors (add/remove, plan limits), **Live demo** (edit a test competitor page, then Crawl now), Account & API (switch plan, API key) |
+| `/app` | Customer dashboard with a **left sidebar** (Crawl now, Add competitor, Weekly report, nav, plan/credits, user). Pages: Overview, Competitors, Changes (filterable), **Reports (weekly / monthly)**, AI digests, Live demo, Account & API |
 | `/admin` | Admin panel: KPIs + MRR, plan mix, search/filter users, change plan, suspend/reactivate, promote/demote, reset credits, set password, delete, add user, audit log |
 
 Demo logins (seeded on first run): `demo@rivalwatch.dev` / `demo1234` · `admin@rivalwatch.dev` / `admin1234`
 (set `ADMIN_PASSWORD` to change the admin password). Other seeded customers exist only to populate the admin table.
+
+**Reports** show changes per day (stacked: product & price vs pages & promotions), deltas vs the previous period, by-competitor breakdown, biggest price moves, highlights, an on-demand AI summary, CSV export and print/PDF. New workspaces are pre-loaded with ~30 days of clearly-labelled *sample* history so reports aren't empty in the demo; Reset in Live demo restores it.
 
 Every user gets an isolated workspace: own crawl credits, own monitor, and own editable copies of three test competitors.
 Billing is a mock: switching plans just resets the credit allowance.

@@ -6,6 +6,8 @@ import { PLANS, ANNUAL_DISCOUNT, isPlan } from './lib/plans.js';
 import { UserStore, Sessions, Limiter, publicUser, normEmail } from './lib/users.js';
 import { Workspaces } from './lib/workspace.js';
 import * as testsite from './lib/testsite.js';
+import { buildReport } from './lib/reports.js';
+import { makeDigest } from './lib/digest.js';
 
 const PORT = +process.env.PORT || 3000;
 const HOST = process.env.HOST || '127.0.0.1';
@@ -171,12 +173,22 @@ http.createServer(async (req, res) => {
       }
       const dc = p.match(/^\/api\/competitors\/(\w+)$/);
       if (dc && M === 'DELETE') { ws.monitor.remove(dc[1]); return send(res, 200, { ok: true }); }
+      if (p === '/api/reports' && M === 'GET') {
+        return send(res, 200, buildReport(ws.monitor.state, url.searchParams.get('period') === 'month' ? 'month' : 'week'));
+      }
+      if (p === '/api/reports/summary' && M === 'POST') {
+        const { period } = await readJson(req);
+        const r = buildReport(ws.monitor.state, period === 'month' ? 'month' : 'week');
+        if (!r.total) return fail(res, 400, 'No changes in this period to summarise');
+        const inRange = ws.monitor.state.changes.filter((c) => c.ts.slice(0, 10) >= r.from);
+        return send(res, 200, await makeDigest(inRange));
+      }
       if (p === '/api/test/edit' && M === 'POST') {
         const { site, action } = await readJson(req);
         return send(res, 200, { edited: testsite.edit(ws.sites, site, action) });
       }
       if (p === '/api/test/reset' && M === 'POST') {
-        testsite.reset(ws.sites); ws.monitor.reset(); ws.crawler.credits = plan.credits;
+        testsite.reset(ws.sites); ws.monitor.reset(); ws.monitor.seedHistory(); ws.crawler.credits = plan.credits;
         await ws.monitor.run();
         return send(res, 200, { ok: true });
       }

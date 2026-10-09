@@ -6,169 +6,374 @@
 <title>Dashboard: RivalWatch</title>
 <link rel="stylesheet" href="/style.css">
 <style>
-  header.bar { background:var(--card); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:10; }
-  header.bar .wrap { display:flex; align-items:center; justify-content:space-between; gap:12px; height:58px; flex-wrap:wrap; }
-  .tabs { display:flex; gap:4px; border-bottom:1px solid var(--line); margin:18px 0 18px; overflow-x:auto; }
-  .tabs button { font:inherit; font-weight:600; background:none; border:0; padding:10px 14px; color:var(--mute); cursor:pointer; border-bottom:2px solid transparent; white-space:nowrap; }
-  .tabs button[aria-selected=true] { color:var(--ink); border-bottom-color:var(--acc); }
-  main { padding-bottom:60px; }
+  /* chart palette: categorical slots 1-2, validated light + dark (scripts/validate_palette.js) */
+  :root { --s1:#2a78d6; --s2:#eb6834; --side:#fff; --side-hover:#f1f3f9; --surface-1:var(--card); }
+  @media (prefers-color-scheme: dark) { :root { --s1:#3987e5; --s2:#d95926; --side:#12141a; --side-hover:#1d2029; } }
+
+  .shell { display:grid; grid-template-columns:260px 1fr; min-height:100vh; }
+  .sidebar { background:var(--side); border-right:1px solid var(--line); position:sticky; top:0; height:100vh; display:flex; flex-direction:column; padding:16px 12px; gap:14px; overflow-y:auto; }
+  .sidebar .logo { padding:2px 8px; }
+  .sidebar .qa { display:grid; gap:8px; padding:0 4px; }
+  .sidebar .qa .btn { width:100%; justify-content:flex-start; }
+  .sidebar .next { font-size:12px; color:var(--mute); padding:0 4px; margin-top:-6px; }
+  .navgroup { display:grid; gap:2px; } .navgroup h3 { font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--mute); margin:6px 10px 4px; font-weight:700; }
+  .nav { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:9px; border:0; background:none; font:inherit; font-weight:600; color:var(--mute); cursor:pointer; text-align:left; width:100%; }
+  .nav:hover { background:var(--side-hover); color:var(--ink); }
+  .nav[aria-current=page] { background:var(--acc-soft); color:var(--acc); }
+  .nav .cnt { margin-left:auto; font-size:12px; }
+  .sidebar .grow { flex:1; }
+  .plancard { border:1px solid var(--line); border-radius:12px; padding:12px; } .plancard .row { margin-bottom:6px; }
+  .usercard { display:flex; align-items:center; gap:10px; padding:4px; } .usercard .meta { min-width:0; flex:1; } .usercard .meta b, .usercard .meta span { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .av { width:34px; height:34px; border-radius:50%; background:var(--acc-soft); color:var(--acc); display:grid; place-items:center; font-weight:800; flex:none; }
+  .iconbtn { border:0; background:none; color:var(--mute); cursor:pointer; padding:6px; border-radius:8px; display:grid; } .iconbtn:hover { background:var(--side-hover); color:var(--ink); }
+
+  .content { min-width:0; }
+  .topbar { display:flex; align-items:center; gap:12px; padding:18px 28px 6px; }
+  .topbar h1 { font-size:24px; } .topbar .sub { color:var(--mute); font-size:14px; }
+  #burger { display:none; }
+  main { padding:12px 28px 60px; max-width:1180px; }
+  .scrim { display:none; }
+  @media (max-width:900px) {
+    .shell { grid-template-columns:1fr; }
+    .sidebar { position:fixed; z-index:40; left:0; top:0; width:272px; transform:translateX(-102%); visibility:hidden; transition:transform .2s, visibility .2s; }
+    body.open .sidebar { transform:none; visibility:visible; box-shadow:0 0 40px rgba(0,0,0,.35); }
+    body.open .scrim { display:block; position:fixed; inset:0; background:rgba(8,10,16,.5); z-index:30; }
+    #burger { display:grid; } .topbar { padding:14px 16px 4px; } main { padding:10px 16px 50px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .sidebar { transition:none; } }
+
   .price { font-variant-numeric:tabular-nums; }
   code, pre { font:13px ui-monospace,Menlo,monospace; } pre { background:var(--bg); border:1px solid var(--line); border-radius:9px; padding:12px; overflow-x:auto; margin:8px 0 0; }
   .planopt { border:2px solid var(--line); border-radius:12px; padding:14px; } .planopt.cur { border-color:var(--acc); }
-  .bar2 { height:6px; background:var(--line); border-radius:9px; overflow:hidden; margin-top:8px; } .bar2 i { display:block; height:100%; background:var(--acc); }
+  .bar2 { height:6px; background:var(--acc-soft); border-radius:9px; overflow:hidden; margin-top:8px; } .bar2 i { display:block; height:100%; background:var(--acc); border-radius:9px; }
+  .kpi .v { font-size:30px; font-weight:800; letter-spacing:-.02em; } .kpi .d { font-size:12px; color:var(--mute); margin-top:2px; }
+  .seg { display:inline-flex; background:var(--line); border-radius:10px; padding:3px; }
+  .seg button { font:inherit; font-weight:600; border:0; background:none; color:var(--mute); padding:6px 14px; border-radius:8px; cursor:pointer; }
+  .seg button[aria-pressed=true] { background:var(--card); color:var(--ink); box-shadow:var(--shadow); }
+  .controls { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px; }
+
+  /* charts */
+  .legend { display:flex; gap:16px; flex-wrap:wrap; font-size:13px; color:var(--mute); margin-bottom:6px; }
+  .legend i { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:6px; vertical-align:-1px; }
+  .chartwrap { position:relative; } svg.chart { width:100%; height:auto; display:block; overflow:visible; }
+  .ax { fill:var(--mute); font-size:11px; } .ax.strong { fill:var(--ink); font-weight:700; } .gl { stroke:var(--line); stroke-width:1; }
+  .col .hit { fill:transparent; cursor:default; } .col:hover .bar, .col:focus-within .bar, .col.on .bar { filter:brightness(1.14); } .col .hit:focus { outline:none; }
+  .col .ring { fill:none; stroke:var(--acc); stroke-width:2; rx:4; opacity:0; } .col:focus-within .ring { opacity:1; }
+  .s1 { fill:var(--s1); } .s2 { fill:var(--s2); }
+  #tip { position:fixed; z-index:60; pointer-events:none; background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:10px; padding:8px 10px; font-size:13px; box-shadow:0 8px 24px rgba(0,0,0,.18); display:none; min-width:150px; }
+  #tip .t { color:var(--mute); font-size:12px; margin-bottom:4px; } #tip .r { display:flex; align-items:center; gap:8px; justify-content:space-between; } #tip .r b { font-variant-numeric:tabular-nums; }
+  #tip .k { display:inline-block; width:10px; height:3px; border-radius:2px; margin-right:6px; vertical-align:middle; }
+  .hbar { display:grid; grid-template-columns:120px 1fr; gap:10px; align-items:center; padding:7px 0; } .hbar .nm { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .hbar .track { display:flex; align-items:center; gap:2px; height:16px; } .hbar .track i { display:block; height:16px; } .hbar .track i:last-of-type { border-radius:0 4px 4px 0; } .hbar .track i:hover { filter:brightness(1.14); }
+  .hbar .track span { margin-left:8px; font-size:13px; font-weight:700; font-variant-numeric:tabular-nums; }
+  table.t { width:100%; border-collapse:collapse; font-size:14px; } table.t th, table.t td { padding:7px 8px; border-bottom:1px solid var(--line); text-align:left; } table.t td.n, table.t th.n { text-align:right; font-variant-numeric:tabular-nums; }
+  .linkbtn { background:none; border:0; color:var(--acc); font:inherit; font-weight:600; cursor:pointer; padding:0; } .linkbtn:hover { text-decoration:underline; }
+
+  @media print {
+    .sidebar, .topbar #burger, .noprint, .scrim, #toast { display:none !important; } .shell { display:block; } main { padding:0; max-width:none; }
+    body { background:#fff; color:#000; } .card { box-shadow:none; break-inside:avoid; }
+  }
 </style>
 </head>
 <body>
-<header class="bar"><div class="wrap">
-  <a class="logo" href="/">RivalWatch</a>
-  <div class="row wrapx"><span class="pill acc" id="planpill"></span><span class="pill" id="credits"></span><span class="small mute" id="who"></span>
-    <button class="btn sm" id="out">Sign out</button></div>
-</div></header>
-
-<main class="wrap">
-  <div class="tabs" role="tablist" id="tabs"></div>
-  <div id="view"></div>
-</main>
+<div class="shell">
+  <aside class="sidebar" id="side" aria-label="Main navigation">
+    <a class="logo" href="/">RivalWatch</a>
+    <div class="qa">
+      <button class="btn primary" id="sCrawl"></button>
+      <button class="btn" id="sAdd"></button>
+      <button class="btn" id="sReport"></button>
+    </div>
+    <div class="next" id="sNext"></div>
+    <nav id="nav" style="display:grid;gap:10px"></nav>
+    <div class="grow"></div>
+    <div class="plancard" id="plan"></div>
+    <div class="usercard" id="user"></div>
+  </aside>
+  <div class="scrim" id="scrim"></div>
+  <div class="content">
+    <header class="topbar"><button class="iconbtn" id="burger" aria-label="Open menu"></button><div><h1 id="title"></h1><div class="sub" id="sub"></div></div></header>
+    <main id="view"></main>
+  </div>
+</div>
+<div id="tip" role="tooltip"></div>
 
 <script src="/common.js"></script>
 <script>
-const TABS = [['overview', 'Overview'], ['competitors', 'Competitors'], ['demo', 'Live demo'], ['account', 'Account & API']];
-let S = null, ME = null, selSite = '', editMsg = 'Pick an edit, then crawl.', tab = (location.hash || '#overview').slice(1);
-if (!TABS.some(([k]) => k === tab)) tab = 'overview';
+// ---------- icons ----------
+const ICONS = {
+  overview: 'M3 3h7v9H3z M14 3h7v5h-7z M14 12h7v9h-7z M3 16h7v5H3z', competitors: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z',
+  changes: 'M22 12h-4l-3 9L9 3l-3 9H2', reports: 'M4 20V10 M10 20V4 M16 20v-7 M22 20H2',
+  digests: 'M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z M14 3v6h6 M8 13h8 M8 17h5',
+  demo: 'M9 3h6 M10 3v6L4.5 19a1.5 1.5 0 0 0 1.3 2.2h12.4a1.5 1.5 0 0 0 1.3-2.2L14 9V3',
+  account: 'M21 2l-9.6 9.6 M15.5 7.5l3 3L22 7l-3-3 M7.5 11a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11z',
+  crawl: 'M21 12a9 9 0 0 0-15-6.7L3 8 M3 3v5h5 M3 12a9 9 0 0 0 15 6.7L21 16 M16 16h5v5', plus: 'M12 5v14 M5 12h14',
+  logout: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4 M16 17l5-5-5-5 M21 12H9', menu: 'M3 6h18 M3 12h18 M3 18h18',
+  download: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3', printer: 'M6 9V2h12v7 M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2 M6 14h12v8H6z',
+  sparkle: 'M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z',
+};
+const NS = 'http://www.w3.org/2000/svg';
+const svg = (tag, attrs = {}, ...kids) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); e.append(...kids.flat().filter((x) => x != null)); return e; };
+const icon = (n, size = 18) => svg('svg', { viewBox: '0 0 24 24', width: size, height: size, fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' }, svg('path', { d: ICONS[n] }));
+const btnI = (n, label, props = {}) => el('button', { class: 'btn', ...props }, icon(n, 16), label);
 
-const typeLabel = (t) => t.replace('_', ' ');
-const kpi = (v, l, extra) => el('div', { class: 'card kpi' }, el('div', { class: 'v' }, String(v)), el('div', { class: 'l' }, l), extra);
+// ---------- state ----------
+const NAV = [['Monitor', [['overview', 'Overview'], ['competitors', 'Competitors'], ['changes', 'Changes']]], ['Insights', [['reports', 'Reports'], ['digests', 'AI digests']]], ['Tools', [['demo', 'Live demo'], ['account', 'Account & API']]]];
+const TITLES = { overview: 'Overview', competitors: 'Competitors', changes: 'Changes', reports: 'Reports', digests: 'AI digests', demo: 'Live demo', account: 'Account & API' };
+let S = null, ME = null, R = { week: null, month: null }, PLANS = {}, sig = '';
+let tab = (location.hash || '#overview').slice(1); if (!TITLES[tab]) tab = 'overview';
+let period = 'week', showTable = false, summary = null, summarizing = false, flt = { type: '', comp: '' }, selSite = '', editMsg = 'Pick an edit, then crawl.';
+const TYPE_LABEL = { price_change: 'price change', product_added: 'product added', product_removed: 'product removed', new_promo: 'new promo', promo_ended: 'promo ended', new_page: 'new page', page_removed: 'page removed' };
+const SERIES = [['product', 'Product & price', 's1', 'var(--s1)'], ['page', 'Pages & promotions', 's2', 'var(--s2)']];
+const fmtDay = (d, o) => new Date(d + 'T00:00:00Z').toLocaleDateString('en', { timeZone: 'UTC', ...o });
+const fmtTime = (iso) => new Date(iso).toLocaleString('en', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
+// ---------- tooltip ----------
+const tip = $('tip');
+function showTip(x, y, title, rows) {
+  tip.replaceChildren(el('div', { class: 't' }, title), ...rows.map(([color, label, val]) => el('div', { class: 'r' }, el('span', {}, color && el('i', { class: 'k', style: 'background:' + color }), label), el('b', {}, String(val)))));
+  tip.style.display = 'block';
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  tip.style.left = Math.max(8, Math.min(innerWidth - w - 8, x + 14)) + 'px'; tip.style.top = Math.max(8, Math.min(innerHeight - h - 8, y - h - 10)) + 'px';
+}
+const hideTip = () => { tip.style.display = 'none'; };
+function bindTip(node, title, rows) {
+  node.addEventListener('pointermove', (e) => showTip(e.clientX, e.clientY, title, rows)); node.addEventListener('pointerleave', hideTip);
+  node.addEventListener('focus', () => { const r = node.getBoundingClientRect(); showTip(r.left + r.width / 2, r.top + 40, title, rows); }); node.addEventListener('blur', hideTip);
+}
+
+// ---------- charts ----------
+const barPath = (x, y, w, h, r) => { r = Math.min(r, h / 2, w / 2); return `M${x},${y + h}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h}Z`; };
+const legend = () => el('div', { class: 'legend' }, SERIES.map(([, name, , color]) => el('span', {}, el('i', { style: 'background:' + color }), name)));
+
+/** Stacked daily columns: product & price (bottom) + pages & promotions (top). */
+function columnChart(daily, weekly) {
+  const W = 720, H = 250, m = { l: 30, r: 6, t: 20, b: 30 }, iw = W - m.l - m.r, ih = H - m.t - m.b, y0 = m.t + ih;
+  const maxV = Math.max(4, ...daily.map((d) => d.product + d.page)); // floor of 4 so a single change isn't a full-height bar
+  const step = maxV <= 4 ? 1 : Math.ceil(maxV / 4), top = Math.ceil(maxV / step) * step, unit = ih / top;
+  const band = iw / daily.length, bw = Math.min(24, band * 0.62);
+  const peak = daily.reduce((b, d, i) => (d.product + d.page > daily[b].product + daily[b].page ? i : b), 0);
+  const kids = [];
+  for (let v = 0; v <= top; v += step) { const y = y0 - v * unit; kids.push(svg('line', { class: 'gl', x1: m.l, x2: W - m.r, y1: y, y2: y }), svg('text', { class: 'ax', x: m.l - 8, y: y + 4, 'text-anchor': 'end' }, String(v))); }
+  daily.forEach((d, i) => {
+    const x = m.l + band * i + (band - bw) / 2, total = d.product + d.page, hp = d.product * unit, hg = d.page * unit;
+    const g = svg('g', { class: 'col' });
+    if (d.product) g.append(svg('path', { class: 'bar s1', d: barPath(x, y0 - hp, bw, hp, d.page ? 0 : 4) }));
+    if (d.page) { const gap = d.product ? 2 : 0; g.append(svg('path', { class: 'bar s2', d: barPath(x, y0 - hp - hg, bw, hg - gap, 4) })); }
+    if (i === peak && total > 0) g.append(svg('text', { class: 'ax strong', x: x + bw / 2, y: y0 - hp - hg - 6, 'text-anchor': 'middle' }, String(total)));
+    const label = fmtDay(d.date, { month: 'short', day: 'numeric' }) + ': ' + total + ' change' + (total === 1 ? '' : 's');
+    const hit = svg('rect', { class: 'hit', x: m.l + band * i, y: m.t - 6, width: band, height: ih + 6 + 24, tabindex: 0, role: 'img', 'aria-label': label });
+    g.append(svg('rect', { class: 'ring', x: m.l + band * i + 1, y: m.t - 5, width: band - 2, height: ih + 5 }), hit);
+    bindTip(hit, fmtDay(d.date, { weekday: 'short', month: 'short', day: 'numeric' }), [...SERIES.map(([k, name, , color]) => [color, name, d[k]]), [null, 'Total', total]]);
+    kids.push(g);
+    if (weekly || (daily.length - 1 - i) % 5 === 0) kids.push(svg('text', { class: 'ax', x: m.l + band * i + band / 2, y: H - 8, 'text-anchor': 'middle' }, weekly ? fmtDay(d.date, { weekday: 'short', day: 'numeric' }) : fmtDay(d.date, { month: 'short', day: 'numeric' })));
+  });
+  kids.push(svg('line', { class: 'gl', x1: m.l, x2: W - m.r, y1: y0, y2: y0, style: 'stroke:var(--mute);opacity:.5' }));
+  return svg('svg', { class: 'chart', viewBox: `0 0 ${W} ${H}`, role: 'group', 'aria-label': `Changes per day, ${daily[0].date} to ${daily.at(-1).date}` }, kids);
+}
+function dailyTable(daily) {
+  return el('div', { class: 'scroll' }, el('table', { class: 't' }, el('thead', {}, el('tr', {}, el('th', {}, 'Day'), el('th', { class: 'n' }, 'Product & price'), el('th', { class: 'n' }, 'Pages & promotions'), el('th', { class: 'n' }, 'Total'))),
+    el('tbody', {}, daily.slice().reverse().map((d) => el('tr', {}, el('td', {}, fmtDay(d.date, { weekday: 'short', month: 'short', day: 'numeric' })), el('td', { class: 'n' }, d.product), el('td', { class: 'n' }, d.page), el('td', { class: 'n' }, d.product + d.page))))));
+}
+function activityCard(r, { weekly, withTable, linkToReports }) {
+  const ch = el('div', { class: 'chartwrap' }, showTable && withTable ? dailyTable(r.daily) : columnChart(r.daily, weekly));
+  return el('div', { class: 'card' },
+    el('div', { class: 'row between wrapx' }, el('div', { class: 'h-sec', style: 'margin:0' }, `Changes per day · ${fmtDay(r.from, { month: 'short', day: 'numeric' })} – ${fmtDay(r.to, { month: 'short', day: 'numeric' })}`),
+      withTable ? el('button', { class: 'linkbtn noprint', onclick: () => { showTable = !showTable; paintView(); } }, showTable ? 'View chart' : 'View as table')
+        : linkToReports && el('button', { class: 'linkbtn', onclick: () => go('reports') }, 'Full report →')),
+    legend(), ch);
+}
+function compBars(r) {
+  const max = Math.max(1, ...r.byCompetitor.map((c) => c.total));
+  if (!r.byCompetitor.length) return el('p', { class: 'mute' }, 'No competitor activity in this period.');
+  return el('div', {}, r.byCompetitor.map((c) => {
+    const row = el('div', { class: 'hbar' }, el('div', { class: 'nm', title: c.name }, c.name),
+      el('div', { class: 'track' }, ...[['product', 's1', 'var(--s1)'], ['page', 's2', 'var(--s2)']].filter(([k]) => c[k]).map(([k, , color]) => el('i', { style: `width:${c[k] / max * 78}%;background:${color}` })), el('span', {}, String(c.total))));
+    bindTip(row, c.name, [['var(--s1)', 'Product & price', c.product], ['var(--s2)', 'Pages & promotions', c.page], [null, 'Price moves', c.priceMoves], [null, 'Promotions', c.promos], [null, 'New pages', c.newPages]]);
+    row.tabIndex = 0; return row;
+  }));
+}
+
+// ---------- shared cards ----------
+const kpi = (v, l, d, extra) => el('div', { class: 'card kpi' }, el('div', { class: 'l' }, l), el('div', { class: 'v' }, String(v)), d && el('div', { class: 'd' }, d), extra);
+const delta = (r) => r.deltaPct == null ? (r.total ? 'no earlier data to compare' : '') : `${r.deltaPct > 0 ? '▲' : r.deltaPct < 0 ? '▼' : '■'} ${Math.abs(r.deltaPct)}% vs previous ${r.days} days`;
+function digestBody(d) {
+  return [el('p', { style: 'margin-bottom:8px' }, d.summary), el('ol', { class: 'actions' }, d.actions.map((a) => el('li', {}, el('b', {}, a.title + ' '),
+    el('span', { class: { high: 'hi', medium: 'md', low: 'lo' }[a.priority] || 'lo' }, '(' + a.priority + ')'), el('div', { class: 'small mute' }, a.why))))];
+}
 function digestCard() {
   const d = S.digest;
-  return el('div', { class: 'card' },
-    el('div', { class: 'h-sec' }, 'AI digest ', el('span', { class: 'mute', style: 'text-transform:none;letter-spacing:0' }, d ? '· ' + (d.source === 'claude' ? 'Claude' : 'rule-based') : '')),
-    d ? [el('p', { style: 'margin-bottom:8px' }, d.summary),
-      el('ol', { class: 'actions' }, d.actions.map((a) => el('li', {}, el('b', {}, a.title + ' '),
-        el('span', { class: { high: 'hi', medium: 'md', low: 'lo' }[a.priority] || 'lo' }, '(' + a.priority + ')'), el('div', { class: 'small mute' }, a.why))))]
-      : el('p', { class: 'mute' }, 'No digest yet. Open the Live demo tab, edit a competitor page, then press “Crawl now”.'));
+  return el('div', { class: 'card' }, el('div', { class: 'h-sec' }, 'Latest AI digest ', el('span', { style: 'text-transform:none;letter-spacing:0' }, d ? '· ' + (d.source === 'claude' ? 'Claude' : 'rule-based') : '')),
+    d ? digestBody(d) : el('p', { class: 'mute' }, 'No digest yet. Open Live demo, edit a competitor page, then crawl.'));
 }
-function changesCard() {
-  return el('div', { class: 'card' }, el('div', { class: 'h-sec' }, 'Detected changes'),
-    S.changes.length ? el('ul', { class: 'plain' }, S.changes.slice(0, 12).map((c) => el('li', {},
-      el('span', { class: 'tag ' + c.type }, typeLabel(c.type)), el('b', {}, c.competitor + ': '), c.label, el('div', { class: 'small mute' }, ago(c.ts)))))
-      : el('p', { class: 'mute' }, 'No changes yet. The baseline is captured; changes appear after the next crawl.'));
+const changeItem = (c) => el('li', {}, el('span', { class: 'tag ' + c.type }, TYPE_LABEL[c.type] || c.type), el('b', {}, c.competitor + ': '), c.label,
+  el('div', { class: 'small mute' }, fmtTime(c.ts), c.sample && el('span', { class: 'pill', style: 'margin-left:8px', title: 'Pre-loaded demo history' }, 'sample')));
+function changesCard(limit) {
+  return el('div', { class: 'card' }, el('div', { class: 'row between' }, el('div', { class: 'h-sec', style: 'margin:0' }, 'Recent changes'), el('button', { class: 'linkbtn', onclick: () => go('changes') }, 'View all →')),
+    S.changes.length ? el('ul', { class: 'plain' }, S.changes.slice(0, limit).map(changeItem)) : el('p', { class: 'mute' }, 'No changes yet.'));
 }
 
+// ---------- views ----------
 function overview() {
-  const used = S.plan.credits - S.credits;
+  const w = R.week, used = S.plan.credits - S.credits;
   return [
-    el('div', { class: 'row between wrapx', style: 'margin-bottom:14px' },
-      el('div', {}, el('h1', { style: 'font-size:24px' }, 'Overview'), el('p', { class: 'small mute', id: 'next' })),
-      el('button', { class: 'btn primary', id: 'crawl', disabled: S.running, onclick: crawlNow }, S.running ? 'Crawling…' : 'Crawl now')),
     el('div', { class: 'grid g4', style: 'margin-bottom:14px' },
-      kpi(`${S.competitors.length}/${S.plan.competitors}`, 'Competitors monitored'), kpi(S.changes.length, 'Changes detected'),
-      kpi(S.credits, 'Credits left', el('div', { class: 'bar2' }, el('i', { style: `width:${Math.max(0, Math.min(100, S.credits / S.plan.credits * 100))}%` }))),
-      kpi(S.lastRun ? ago(S.lastRun) : '–', 'Last crawl')),
-    el('div', { class: 'grid g2' }, digestCard(), changesCard()),
+      kpi(w.total, 'Changes this week', delta(w)), kpi(`${S.competitors.length}/${S.plan.competitors}`, 'Competitors monitored', S.plan.name + ' plan limit'),
+      kpi(S.credits.toLocaleString(), 'Credits left', `${used.toLocaleString()} used of ${S.plan.credits.toLocaleString()}`, el('div', { class: 'bar2' }, el('i', { style: `width:${Math.max(0, Math.min(100, S.credits / S.plan.credits * 100))}%` }))),
+      kpi(S.lastRun ? ago(S.lastRun) : '–', 'Last crawl', `${w.crawls.count} crawls this week`)),
+    el('div', { style: 'margin-bottom:14px' }, activityCard(w, { weekly: true, linkToReports: true })),
+    el('div', { class: 'grid g2' }, digestCard(), changesCard(6)),
   ];
 }
 
-function compCard(c, withRemove) {
+function compCard(c) {
   const snap = c.snapshot, prods = snap ? Object.values(snap.products) : [];
   return el('div', { class: 'card' },
-    el('div', { class: 'row between' }, el('b', {}, c.name), withRemove && el('button', { class: 'btn sm danger', onclick: () => removeComp(c) }, 'Remove')),
-    el('div', { class: 'small mute', style: 'word-break:break-all' }, c.url),
-    el('div', { class: 'small mute' }, snap ? `${snap.pagesCrawled} pages · ${c.snapshots} snapshots` : 'Baseline pending…'),
+    el('div', { class: 'row between' }, el('b', {}, c.name), el('button', { class: 'btn sm danger', onclick: () => removeComp(c) }, 'Remove')),
+    el('div', { class: 'small mute', style: 'word-break:break-all' }, c.url), el('div', { class: 'small mute' }, snap ? `${snap.pagesCrawled} pages · ${c.snapshots} snapshots` : 'Baseline pending…'),
     c.error && el('div', { class: 'err' }, c.error),
     prods.length ? el('ul', { class: 'plain', style: 'margin-top:8px' }, prods.map((p) => el('li', { class: 'row between' }, el('span', {}, p.name), el('span', { class: 'price' }, p.price)))) : null,
     snap && snap.promotions.map((p) => el('div', { class: 'small', style: 'margin-top:8px' }, '🏷 ' + p)),
     snap && el('div', { class: 'small mute', style: 'margin-top:8px' }, 'Pages: ' + snap.pages.join(', ')));
 }
-
 function competitors() {
   const full = S.competitors.length >= S.plan.competitors;
   return [
-    el('h1', { style: 'font-size:24px;margin-bottom:14px' }, 'Competitors'),
-    el('form', { class: 'card', style: 'margin-bottom:14px', novalidate: true, onsubmit: addComp },
+    el('form', { class: 'card', id: 'addform', style: 'margin-bottom:14px', novalidate: true, onsubmit: addComp },
       el('div', { class: 'h-sec' }, `Add a competitor (${S.competitors.length}/${S.plan.competitors} on ${S.plan.name})`),
       el('div', { class: 'grid g3' }, el('div', {}, el('label', { for: 'cn' }, 'Name'), el('input', { id: 'cn', placeholder: 'Acme Inc.' })),
         el('div', {}, el('label', { for: 'cu' }, 'URL'), el('input', { id: 'cu', placeholder: 'https://example.com/pricing', type: 'url' })),
         el('div', { style: 'align-self:end' }, el('button', { class: 'btn primary', disabled: full }, 'Add & crawl'))),
       full ? el('p', { class: 'err' }, 'Plan limit reached. Upgrade in Account & API to add more.') : el('p', { class: 'small mute', style: 'margin-top:6px' }, 'Public sites only; private or internal addresses are blocked.'),
       el('p', { class: 'err', id: 'cerr' })),
-    el('div', { class: 'grid g3' }, S.competitors.map((c) => compCard(c, true))),
+    el('div', { class: 'grid g3' }, S.competitors.map(compCard)),
   ];
+}
+
+function changes() {
+  const types = [...new Set(S.changes.map((c) => c.type))], comps = [...new Set(S.changes.map((c) => c.competitor))];
+  const list = S.changes.filter((c) => (!flt.type || c.type === flt.type) && (!flt.comp || c.competitor === flt.comp));
+  const sel = (id, label, opts, key, fmt = (x) => x) => el('select', { id, class: 'inline', 'aria-label': label, onchange: (e) => { flt[key] = e.target.value; paintView(); } },
+    el('option', { value: '' }, label), opts.map((o) => el('option', { value: o, selected: flt[key] === o }, fmt(o))));
+  return [el('div', { class: 'controls' }, sel('fType', 'All types', types, 'type', (t) => TYPE_LABEL[t] || t), sel('fComp', 'All competitors', comps, 'comp'), el('span', { class: 'small mute' }, `${list.length} change${list.length === 1 ? '' : 's'}`)),
+    el('div', { class: 'card' }, list.length ? el('ul', { class: 'plain' }, list.slice(0, 100).map(changeItem)) : el('p', { class: 'mute' }, 'No changes match.'))];
+}
+
+function reports() {
+  const r = R[period], weekly = period === 'week';
+  const range = `${fmtDay(r.from, { month: 'short', day: 'numeric' })} – ${fmtDay(r.to, { month: 'short', day: 'numeric', year: 'numeric' })}`;
+  return [
+    el('div', { class: 'controls noprint' },
+      el('div', { class: 'seg', role: 'group', 'aria-label': 'Report period' }, ['week', 'month'].map((p) => el('button', { 'aria-pressed': String(p === period), onclick: () => { period = p; summary = null; paintView(); } }, p === 'week' ? 'Weekly' : 'Monthly'))),
+      el('span', { class: 'mute' }, range), el('span', { style: 'flex:1' }),
+      btnI('sparkle', summarizing ? 'Summarising…' : 'AI summary', { disabled: summarizing || !r.total, onclick: genSummary }), btnI('download', 'Export CSV', { onclick: () => exportCsv(r) }), btnI('printer', 'Print / PDF', { onclick: () => print() })),
+    el('div', { class: 'grid g4', style: 'margin-bottom:14px' },
+      kpi(r.total, 'Total changes', delta(r)), kpi(r.bySignal.product, 'Product & price changes', `${r.byType.price_change || 0} price move${(r.byType.price_change || 0) === 1 ? '' : 's'}`),
+      kpi(r.bySignal.page, 'Pages & promotions', `${r.byType.new_promo || 0} promo · ${r.byType.new_page || 0} new page${(r.byType.new_page || 0) === 1 ? '' : 's'}`), kpi(r.crawls.count, 'Crawls run', `${r.crawls.pages} pages scanned · ${r.crawls.withChanges} found changes`)),
+    el('div', { style: 'margin-bottom:14px' }, activityCard(r, { weekly, withTable: true })),
+    summary && el('div', { class: 'card', style: 'margin-bottom:14px' }, el('div', { class: 'h-sec' }, `AI summary · ${weekly ? 'weekly' : 'monthly'} · ${summary.source === 'claude' ? 'Claude' : 'rule-based'}`), digestBody(summary)),
+    el('div', { class: 'grid g2', style: 'margin-bottom:14px' },
+      el('div', { class: 'card' }, el('div', { class: 'h-sec' }, 'By competitor'), legend(), compBars(r)),
+      el('div', { class: 'card' }, el('div', { class: 'h-sec' }, 'Highlights'),
+        el('ul', { class: 'plain' }, r.highlights.map((h) => el('li', {}, h))),
+        Object.keys(r.byType).length ? el('div', { style: 'margin-top:10px' }, el('div', { class: 'h-sec' }, 'By type'), el('ul', { class: 'plain' }, Object.entries(r.byType).sort((a, b) => b[1] - a[1]).map(([t, n]) => el('li', { class: 'row between' }, el('span', { class: 'tag ' + t }, TYPE_LABEL[t] || t), el('b', { class: 'price' }, n))))) : null)),
+    r.biggestMoves.length ? el('div', { class: 'card' }, el('div', { class: 'h-sec' }, 'Biggest price moves'), el('div', { class: 'scroll' }, el('table', { class: 't' },
+      el('thead', {}, el('tr', {}, ['Competitor', 'Plan', 'From', 'To', 'Change'].map((h, i) => el('th', { class: i > 1 ? 'n' : '' }, h)))),
+      el('tbody', {}, r.biggestMoves.map((m) => el('tr', {}, el('td', {}, m.competitor), el('td', {}, m.name), el('td', { class: 'n' }, m.from), el('td', { class: 'n' }, m.to), el('td', { class: 'n' }, el('b', {}, (m.pct > 0 ? '+' : '') + m.pct + '%'))))))) ) : null,
+    r.hasSample && el('p', { class: 'small mute', style: 'margin-top:12px' }, 'Includes pre-loaded sample history so reports are populated in the demo. Use Reset in Live demo to start fresh.'),
+  ];
+}
+
+function digests() {
+  return S.digests.length ? S.digests.map((d) => el('div', { class: 'card', style: 'margin-bottom:14px' }, el('div', { class: 'h-sec' }, `${fmtTime(d.ts)} · ${d.changeCount} change${d.changeCount === 1 ? '' : 's'} · ${d.source === 'claude' ? 'Claude' : 'rule-based'}`), digestBody(d)))
+    : el('div', { class: 'card mute' }, 'No digests yet. A digest is written after every crawl that detects changes.');
 }
 
 function demo() {
   return [
-    el('h1', { style: 'font-size:24px;margin-bottom:6px' }, 'Live demo'),
-    el('p', { class: 'mute', style: 'margin-bottom:14px' }, 'These are test competitor pages only you can edit. Change one, press “Crawl now”, and watch RivalWatch detect it and write the digest.'),
+    el('p', { class: 'mute', style: 'margin-bottom:14px' }, 'These are test competitor pages only you can edit. Change one, crawl, and watch RivalWatch detect it and write the digest.'),
     S.testSites.length ? el('div', { class: 'card', style: 'margin-bottom:14px' },
       el('div', { class: 'row wrapx' },
         el('select', { id: 'site', class: 'inline', 'aria-label': 'Competitor', onchange: (e) => { selSite = e.target.value; } }, S.testSites.map((t) => el('option', { value: t.id, selected: t.id === selSite }, t.name))),
-        ...[['price_drop', 'Cut a price 20%'], ['price_hike', 'Raise top price 15%'], ['add_tier', 'Add new tier'], ['promo', 'Launch promotion'], ['new_page', 'Publish new page']]
-          .map(([a, l]) => el('button', { class: 'btn sm', onclick: () => editSite(a) }, l)),
+        ...[['price_drop', 'Cut a price 20%'], ['price_hike', 'Raise top price 15%'], ['add_tier', 'Add new tier'], ['promo', 'Launch promotion'], ['new_page', 'Publish new page']].map(([a, l]) => el('button', { class: 'btn sm', onclick: () => editSite(a) }, l)),
         el('button', { class: 'btn sm', onclick: resetDemo }, 'Reset')),
       el('p', { class: 'small mute', id: 'editmsg', style: 'margin-top:10px' }, editMsg),
       el('div', { class: 'row wrapx small', style: 'margin-top:6px' }, el('span', { class: 'mute' }, 'View the page:'), S.testSites.map((t) => el('a', { href: t.url + 'pricing', target: '_blank', rel: 'noopener' }, t.name))),
-      el('div', { style: 'margin-top:12px' }, el('button', { class: 'btn primary', onclick: crawlNow }, 'Crawl now')))
-      : el('div', { class: 'card mute' }, 'You removed the demo competitors. Press Reset to bring them back.', el('div', { style: 'margin-top:8px' }, el('button', { class: 'btn sm', onclick: resetDemo }, 'Reset'))),
-    el('div', { class: 'grid g2' }, digestCard(), changesCard()),
+      el('div', { style: 'margin-top:12px' }, btnI('crawl', 'Crawl now', { class: 'btn primary', onclick: crawlNow })))
+      : el('div', { class: 'card mute', style: 'margin-bottom:14px' }, 'You removed the demo competitors. Press Reset to bring them back.', el('div', { style: 'margin-top:8px' }, el('button', { class: 'btn sm', onclick: resetDemo }, 'Reset'))),
+    el('div', { class: 'grid g2' }, digestCard(), changesCard(6)),
   ];
 }
 
 function account() {
-  const base = location.origin;
-  const key = ME.apiKey;
+  const base = location.origin, key = ME.apiKey;
   return [
-    el('h1', { style: 'font-size:24px;margin-bottom:14px' }, 'Account & API'),
-    el('div', { class: 'card', style: 'margin-bottom:14px' }, el('div', { class: 'h-sec' }, 'Profile'),
-      el('div', {}, el('b', {}, ME.name), ' · ', ME.email), el('div', { class: 'small mute' }, 'Member since ' + new Date(ME.createdAt).toLocaleDateString())),
+    el('div', { class: 'card', style: 'margin-bottom:14px' }, el('div', { class: 'h-sec' }, 'Profile'), el('div', {}, el('b', {}, ME.name), ' · ', ME.email), el('div', { class: 'small mute' }, 'Member since ' + new Date(ME.createdAt).toLocaleDateString())),
     el('div', { class: 'h-sec' }, 'Plan (demo checkout, no payment taken)'),
     el('div', { class: 'grid g3', style: 'margin-bottom:14px' }, Object.values(PLANS).map((p) => el('div', { class: 'planopt' + (p.id === ME.plan ? ' cur' : '') },
       el('div', { class: 'row between' }, el('b', {}, p.name), p.id === ME.plan && el('span', { class: 'pill acc' }, 'Current')),
-      el('div', {}, el('b', { style: 'font-size:22px' }, money(p.price)), el('span', { class: 'mute' }, '/mo')),
-      el('div', { class: 'small mute' }, `${p.competitors} competitors · ${p.credits.toLocaleString()} credits`),
+      el('div', {}, el('b', { style: 'font-size:22px' }, money(p.price)), el('span', { class: 'mute' }, '/mo')), el('div', { class: 'small mute' }, `${p.competitors} competitors · ${p.credits.toLocaleString()} credits`),
       p.id !== ME.plan && el('button', { class: 'btn sm', style: 'margin-top:10px', onclick: () => changePlan(p) }, (p.price > PLANS[ME.plan].price ? 'Upgrade' : 'Downgrade') + ' to ' + p.name)))),
-    el('div', { class: 'card' }, el('div', { class: 'h-sec' }, 'Crawl API'),
-      el('p', { class: 'small mute' }, 'SocialCrawl-style endpoints. Each page fetched costs 1 credit.'),
+    el('div', { class: 'card' }, el('div', { class: 'h-sec' }, 'Crawl API'), el('p', { class: 'small mute' }, 'SocialCrawl-style endpoints. Each page fetched costs 1 credit.'),
       el('div', { class: 'row wrapx', style: 'margin-top:8px' }, el('code', { id: 'keytxt' }, key.slice(0, 7) + '…••••••••••••'),
-        el('button', { class: 'btn sm', onclick: () => { $('keytxt').textContent = key; } }, 'Reveal'),
-        el('button', { class: 'btn sm', onclick: () => navigator.clipboard?.writeText(key).then(() => toast('Copied')) }, 'Copy'),
-        el('button', { class: 'btn sm danger', onclick: rotate }, 'Rotate')),
-      el('pre', {}, `curl -H "x-api-key: ${key.slice(0, 7)}…" "${base}/v1/credits/balance"\ncurl -H "x-api-key: …" "${base}/v1/web/scrape?url=https://example.com"\ncurl -X POST -H "x-api-key: …" -H "content-type: application/json" \\\n  ${base}/v1/web/crawl -d '{"url":"https://example.com","max_depth":1,"limit":5}'`)),
-  ];
+        el('button', { class: 'btn sm', onclick: () => { $('keytxt').textContent = key; } }, 'Reveal'), el('button', { class: 'btn sm', onclick: () => navigator.clipboard?.writeText(key).then(() => toast('Copied')) }, 'Copy'), el('button', { class: 'btn sm danger', onclick: rotate }, 'Rotate')),
+      el('pre', {}, `curl -H "x-api-key: ${key.slice(0, 7)}…" "${base}/v1/credits/balance"\ncurl -H "x-api-key: …" "${base}/v1/web/scrape?url=https://example.com"\ncurl -X POST -H "x-api-key: …" -H "content-type: application/json" \\\n  ${base}/v1/web/crawl -d '{"url":"https://example.com","max_depth":1,"limit":5}'`))];
 }
+const VIEWS = { overview, competitors, changes, reports, digests, demo, account };
+const SUBS = { overview: () => S.lastRun ? 'Last crawl ' + ago(S.lastRun) : 'Baseline crawl running…', competitors: () => `${S.competitors.length} of ${S.plan.competitors} sites`, changes: () => `${S.changes.length} detected in total`, reports: () => 'Weekly and monthly competitor activity', digests: () => 'AI-written summaries and actions', demo: () => 'Edit a test page, then crawl', account: () => 'Plan, billing and API access' };
 
-// ---- actions
-async function crawlNow() { document.querySelectorAll('#crawl').forEach((b) => (b.disabled = true)); toast('Crawling…'); await api('/api/crawl', { method: 'POST' }); await refresh(); toast('Crawl complete'); }
+// ---------- actions ----------
+async function crawlNow() { if (S.running) return; document.querySelectorAll('#sCrawl').forEach((b) => (b.disabled = true)); toast('Crawling…'); try { await api('/api/crawl', { method: 'POST' }); await refresh(true); toast('Crawl complete'); } catch (e) { toast(e.message); } }
 async function editSite(action) { try { const r = await api('/api/test/edit', { method: 'POST', body: { site: $('site').value, action } }); editMsg = 'Edited: ' + r.edited + '. Now press “Crawl now”.'; $('editmsg').textContent = editMsg; } catch (e) { toast(e.message); } }
-async function resetDemo() { editMsg = 'Reset to baseline.'; toast('Resetting…'); await api('/api/test/reset', { method: 'POST' }); await refresh(); toast('Demo reset'); }
-async function addComp(e) {
-  e.preventDefault(); $('cerr').textContent = '';
-  try { await api('/api/competitors', { method: 'POST', body: { name: $('cn').value, url: $('cu').value } }); toast('Added. Baseline crawl started.'); setTimeout(refresh, 1500); await refresh(); }
-  catch (x) { $('cerr').textContent = x.message; }
+async function resetDemo() { editMsg = 'Reset to baseline.'; toast('Resetting…'); await api('/api/test/reset', { method: 'POST' }); summary = null; await refresh(true); toast('Demo reset'); }
+async function addComp(e) { e.preventDefault(); $('cerr').textContent = ''; try { await api('/api/competitors', { method: 'POST', body: { name: $('cn').value, url: $('cu').value } }); toast('Added. Baseline crawl started.'); await refresh(true); setTimeout(() => refresh(true), 2000); } catch (x) { $('cerr').textContent = x.message; } }
+async function removeComp(c) { if (!confirm(`Stop monitoring ${c.name}?`)) return; await api('/api/competitors/' + c.id, { method: 'DELETE' }); await refresh(true); }
+async function changePlan(p) { await api('/api/me/plan', { method: 'POST', body: { plan: p.id } }); toast('Switched to ' + p.name); await refresh(true); }
+async function rotate() { if (!confirm('Rotate the API key? The old key stops working.')) return; await api('/api/me/rotate-key', { method: 'POST' }); await refresh(true); toast('New key issued'); }
+async function genSummary() { summarizing = true; paintView(); try { summary = await api('/api/reports/summary', { method: 'POST', body: { period } }); } catch (e) { toast(e.message); } summarizing = false; paintView(); }
+function exportCsv(r) {
+  const safe = (v) => { v = String(v ?? ''); if (/^[=+\-@\t\r]/.test(v)) v = "'" + v; return '"' + v.replace(/"/g, '""') + '"'; };
+  const rows = [['date', 'competitor', 'type', 'description', 'sample'], ...r.changes.map((c) => [c.ts, c.competitor, c.type, c.label, c.sample])];
+  const a = el('a', { href: URL.createObjectURL(new Blob([rows.map((x) => x.map(safe).join(',')).join('\n')], { type: 'text/csv' })), download: `rivalwatch-${r.period}ly-${r.to}.csv` });
+  document.body.append(a); a.click(); a.remove(); toast('CSV downloaded');
 }
-async function removeComp(c) { if (!confirm(`Stop monitoring ${c.name}?`)) return; await api('/api/competitors/' + c.id, { method: 'DELETE' }); await refresh(); }
-async function changePlan(p) { await api('/api/me/plan', { method: 'POST', body: { plan: p.id } }); toast('Switched to ' + p.name); await refresh(); }
-async function rotate() { if (!confirm('Rotate the API key? The old key stops working.')) return; await api('/api/me/rotate-key', { method: 'POST' }); await refresh(); toast('New key issued'); }
+const go = (t) => { tab = t; location.hash = t; document.body.classList.remove('open'); paintShell(); paintView(); window.scrollTo(0, 0); };
 
-// ---- shell
-let PLANS = {};
-function paint() {
-  $('tabs').replaceChildren(...TABS.map(([k, l]) => el('button', { role: 'tab', 'aria-selected': k === tab, onclick: () => { tab = k; location.hash = k; paint(); } }, l)));
-  const v = { overview, competitors, demo, account }[tab]();
-  const focus = document.activeElement?.id;
-  $('view').replaceChildren(...[v].flat());
-  if (focus && $(focus) && ['cn', 'cu'].includes(focus)) $(focus).focus();
-  $('planpill').textContent = S.plan.name + ' plan'; $('credits').textContent = S.credits.toLocaleString() + ' credits'; $('who').textContent = ME.email;
+// ---------- shell ----------
+function buildNav() {
+  $('nav').replaceChildren(...NAV.map(([group, items]) => el('div', { class: 'navgroup' }, el('h3', {}, group),
+    items.map(([k, label]) => el('button', { class: 'nav', 'data-k': k, onclick: () => go(k) }, icon(k), label, k === 'changes' && el('span', { class: 'cnt pill', id: 'cnt' }))))));
+  $('sCrawl').append(icon('crawl', 16), el('span', { id: 'sCrawlT' }, 'Crawl now')); $('sCrawl').onclick = crawlNow;
+  $('sAdd').append(icon('plus', 16), 'Add competitor'); $('sAdd').onclick = () => { go('competitors'); setTimeout(() => $('cn')?.focus(), 50); };
+  $('sReport').append(icon('reports', 16), 'Weekly report'); $('sReport').onclick = () => { period = 'week'; go('reports'); };
+  $('burger').append(icon('menu', 22)); $('burger').onclick = () => document.body.classList.toggle('open'); $('scrim').onclick = () => document.body.classList.remove('open');
 }
-async function refresh() {
-  [S, ME] = await Promise.all([api('/api/state'), api('/api/me')]);
-  if (['cn', 'cu', 'site'].includes(document.activeElement?.id)) { $('planpill').textContent = S.plan.name + ' plan'; $('credits').textContent = S.credits.toLocaleString() + ' credits'; return; } // don't clobber typing
-  paint();
+function paintShell() {
+  document.querySelectorAll('.nav').forEach((b) => b.toggleAttribute('aria-current', false) || (b.dataset.k === tab && b.setAttribute('aria-current', 'page')));
+  $('title').textContent = TITLES[tab]; document.title = TITLES[tab] + ': RivalWatch';
+  if (!S) return;
+  $('sub').textContent = SUBS[tab]();
+  $('sCrawl').disabled = S.running; $('sCrawlT').textContent = S.running ? 'Crawling…' : 'Crawl now';
+  $('cnt').textContent = S.changes.length;
+  const pct = Math.max(0, Math.min(100, S.credits / S.plan.credits * 100));
+  $('plan').replaceChildren(el('div', { class: 'row between' }, el('b', {}, S.plan.name + ' plan'), el('button', { class: 'linkbtn small', onclick: () => go('account') }, 'Upgrade')),
+    el('div', { class: 'small mute' }, `${S.credits.toLocaleString()} / ${S.plan.credits.toLocaleString()} credits`), el('div', { class: 'bar2' }, el('i', { style: `width:${pct}%` })));
+  $('user').replaceChildren(el('div', { class: 'av' }, ME.name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase()),
+    el('div', { class: 'meta' }, el('b', {}, ME.name), el('span', { class: 'small mute' }, ME.email)), el('button', { class: 'iconbtn', 'aria-label': 'Sign out', title: 'Sign out', onclick: logout }, icon('logout')));
 }
-setInterval(() => { if (!S || !$('next')) return; const t = Math.max(0, Math.round((S.nextRun - Date.now()) / 1000)); $('next').textContent = `Auto-crawl in ${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; }, 1000);
+function paintView() { hideTip(); $('view').replaceChildren(...[VIEWS[tab]()].flat().filter(Boolean)); paintShell(); }
+async function refresh(force) {
+  [S, ME, R.week, R.month] = await Promise.all([api('/api/state'), api('/api/me'), api('/api/reports?period=week'), api('/api/reports?period=month')]);
+  const next = [S.runs, S.running, S.changes.length, S.competitors.length, S.credits, S.digest?.ts, ME.plan, S.competitors.map((c) => c.snapshots + (c.error || '')).join()].join('|');
+  const typing = ['cn', 'cu', 'site', 'fType', 'fComp'].includes(document.activeElement?.id);
+  paintShell();
+  if (force || (next !== sig && !typing)) { sig = next; paintView(); }
+}
+setInterval(() => { if (!S) return; const t = Math.max(0, Math.round((S.nextRun - Date.now()) / 1000)); $('sNext').textContent = `Auto-crawl in ${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; }, 1000);
 setInterval(() => { if (!document.hidden) refresh().catch(() => {}); }, 5000);
-$('out').onclick = logout;
-api('/api/plans', { noRedirect: true }).then((d) => { d.plans.forEach((p) => PLANS[p.id] = p); return refresh(); });
+window.addEventListener('hashchange', () => { const t = location.hash.slice(1); if (TITLES[t] && t !== tab) go(t); });
+buildNav(); paintShell();
+api('/api/plans', { noRedirect: true }).then((d) => { d.plans.forEach((p) => PLANS[p.id] = p); return refresh(true); });
 </script>
 </body>
 </html>
