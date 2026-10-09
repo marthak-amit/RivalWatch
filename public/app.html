@@ -91,6 +91,13 @@
   .switch .lb { color:#b42318; } .switch[aria-checked=true] .lb { color:#05603a; } .switch.err .lb { color:#b42318; }
   @media (prefers-color-scheme: dark) { .switch .lb, .switch.err .lb { color:#fda29b; } .switch[aria-checked=true] .lb { color:#6ce9a6; } }
   .switch[aria-busy=true] { opacity:.6; pointer-events:none; }
+  /* small status icon next to a competitor's name: green = enabled & working, red = disabled or failing */
+  .sdot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:8px; vertical-align:middle; flex:none; background:var(--good); box-shadow:0 0 0 3px color-mix(in srgb, var(--good) 25%, transparent); transition:background .2s, box-shadow .2s; }
+  .sdot.on { animation:sping 2.2s infinite; }
+  .sdot.off { background:var(--bad); box-shadow:0 0 0 3px color-mix(in srgb, var(--bad) 28%, transparent); }
+  .sdot.wait { background:var(--mute); box-shadow:0 0 0 3px color-mix(in srgb, var(--mute) 25%, transparent); }
+  @keyframes sping { 0% { box-shadow:0 0 0 0 color-mix(in srgb, var(--good) 55%, transparent); } 70%, 100% { box-shadow:0 0 0 7px transparent; } }
+  @media (prefers-reduced-motion: reduce) { .sdot.on { animation:none; } }
   .dim { opacity:.5; filter:grayscale(.7); transition:opacity .2s; }
   .clamp { display:-webkit-box; -webkit-line-clamp:3; line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
   .kv { display:grid; grid-template-columns:104px 1fr; gap:8px; padding:6px 0; border-top:1px solid var(--line); font-size:13px; } .kv .k { color:var(--mute); } .kv .v2 { display:flex; flex-wrap:wrap; gap:6px; align-items:center; min-width:0; overflow-wrap:anywhere; }
@@ -274,7 +281,7 @@ function overviewAll(w) {
   const rows = S.competitors.map((c) => {
     const snap = c.snapshot, n = w.byCompetitor.find((x) => x.id === c.id), last = S.changes.find((x) => x.competitorId === c.id);
     return el('tr', { class: 'go', tabindex: 0, onclick: () => setComp(c.id), onkeydown: (e) => e.key === 'Enter' && setComp(c.id) },
-      el('td', {}, el('b', {}, c.name), !c.enabled && el('span', { class: 'pill bad', style: 'margin-left:8px' }, 'Disabled'), c.enabled && c.error && el('div', { class: 'err' }, c.error)), el('td', { class: 'n' }, snap ? Object.keys(snap.products).length : '–'), el('td', { class: 'n' }, snap ? priceRange(snap) : '–'),
+      el('td', {}, statusDot(c), el('b', {}, c.name), !c.enabled && el('span', { class: 'pill bad', style: 'margin-left:8px' }, 'Disabled'), c.enabled && c.error && el('div', { class: 'err' }, c.error)), el('td', { class: 'n' }, snap ? Object.keys(snap.products).length : '–'), el('td', { class: 'n' }, snap ? priceRange(snap) : '–'),
       el('td', { class: 'n' }, snap ? snap.promotions.length : '–'), el('td', { class: 'n' }, snap ? snap.pages.length : '–'), el('td', { class: 'n' }, n ? n.total : 0),
       el('td', { class: 'n' }, last ? ago(last.ts) : '–'), el('td', {}, el('span', { class: 'linkbtn' }, 'View →')));
   });
@@ -296,7 +303,7 @@ function overviewOne(c, w) {
   const history = S.changes.filter((x) => x.competitorId === c.id && x.type === 'price_change');
   const lastFor = (name) => history.find((h) => h.name.toLowerCase() === name.toLowerCase());
   const pricing = el('div', { class: 'card' },
-    el('div', { class: 'row between wrapx' }, el('div', {}, el('b', {}, c.name), el('div', { class: 'small' }, el('a', { href: c.url, target: '_blank', rel: 'noopener noreferrer' }, c.url))), snap && el('span', { class: 'small mute' }, 'Snapshot ' + ago(snap.ts))),
+    el('div', { class: 'row between wrapx' }, el('div', {}, el('b', {}, statusDot(c), c.name), el('div', { class: 'small' }, el('a', { href: c.url, target: '_blank', rel: 'noopener noreferrer' }, c.url))), snap && el('span', { class: 'small mute' }, 'Snapshot ' + ago(snap.ts))),
     c.error && el('div', { class: 'err' }, c.error),
     el('div', { class: 'h-sec', style: 'margin-top:14px' }, 'Current pricing'),
     prods.length ? el('div', { class: 'scroll' }, el('table', { class: 't' }, el('thead', {}, el('tr', {}, el('th', {}, 'Plan'), el('th', { class: 'n' }, 'Price'), el('th', {}, 'Last change'))),
@@ -329,6 +336,10 @@ async function toggleComp(c, e) {
   const btn = e.currentTarget; btn.setAttribute('aria-busy', 'true');
   try { await api('/api/competitors/' + c.id, { method: 'PATCH', body: { enabled: !c.enabled } }); toast(`${c.name} ${c.enabled ? 'disabled: it will no longer be crawled' : 'enabled: checking now'}`); await refresh(true); if (!c.enabled) setTimeout(() => refresh(true), 1500); }
   catch (x) { toast(x.message); btn.removeAttribute('aria-busy'); }
+}
+function statusDot(c) {
+  const state = !c.enabled ? ['off', 'Disabled'] : c.error ? ['off', 'Error'] : c.snapshot ? ['on', 'Active'] : ['wait', 'Starting'];
+  return el('span', { class: 'sdot ' + state[0], role: 'img', 'aria-label': state[1], title: state[1] });
 }
 function statusSwitch(c) {
   const bad = c.enabled && c.error, label = !c.enabled ? 'Disabled' : bad ? 'Error' : c.snapshot ? 'Active' : 'Starting…';
@@ -368,7 +379,7 @@ function compCard(c) {
   const snap = c.snapshot, prods = snap ? Object.values(snap.products) : [], st = compStats(c);
   return el('div', { class: 'card', style: 'display:flex;flex-direction:column' },
     el('div', { class: 'row between' },
-      el('div', { style: 'min-width:0' }, el('b', { style: 'font-size:16px' }, c.name),
+      el('div', { style: 'min-width:0' }, el('b', { style: 'font-size:16px' }, statusDot(c), c.name),
         el('div', { class: 'small mute', style: 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap' }, (c.site ? 'Demo site' : hostOf(c.url)) + ' · ' + (snap ? 'checked ' + ago(snap.ts) : 'baseline pending'))),
       statusSwitch(c)),
     c.enabled && c.error && el('div', { class: 'err', style: 'margin-top:6px' }, c.error),
