@@ -1,7 +1,7 @@
 """HTTP GET through Scrapling's fetcher, following redirects ourselves so every hop passes the SSRF guard."""
 import logging
 from dataclasses import dataclass
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 
 from curl_cffi.requests.exceptions import RequestException
 from scrapling.fetchers import Fetcher
@@ -40,9 +40,14 @@ class Page:
             return self.body.decode("utf-8", errors="replace")
 
 
+def _host(url: str) -> str:
+    return (urlsplit(url).hostname or "").removeprefix("www.")
+
+
 def fetch(url: str, *, user_agent: str, timeout: float = 20, retries: int = 2, max_redirects: int = 5,
-          max_bytes: int = 5_000_000, accept: str = ACCEPT_HTML) -> Page:
-    """Raises BlockedURL (SSRF) or FetchError (network, too many redirects). HTTP error codes are returned."""
+          max_bytes: int = 5_000_000, accept: str = ACCEPT_HTML, stay_on: str | None = None) -> Page:
+    """Raises BlockedURL (SSRF) or FetchError (network, too many redirects, or a redirect off `stay_on`'s site).
+    HTTP error codes are returned, not raised."""
     current = url
     for _ in range(max_redirects + 1):
         check_url(current)
@@ -55,6 +60,8 @@ def fetch(url: str, *, user_agent: str, timeout: float = 20, retries: int = 2, m
         location = headers.get("location")
         if 300 <= r.status < 400 and location:
             current = urljoin(current, location)
+            if stay_on and _host(current) != _host(stay_on):
+                raise FetchError(f"redirected off-site to {current}")
             continue
         # ponytail: the whole body is downloaded before truncation; stream it if huge pages become a problem
         return Page(url=current, status=r.status, headers=headers, body=bytes(r.body[:max_bytes]))

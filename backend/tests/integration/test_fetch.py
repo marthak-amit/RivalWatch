@@ -35,3 +35,15 @@ def test_network_failure_is_a_fetch_error(monkeypatch):
     monkeypatch.setattr(ssrf, "ALLOW_LOCAL", {"127.0.0.1:9"})
     with pytest.raises(FetchError):
         fetch("http://127.0.0.1:9/", user_agent=UA, timeout=3, retries=1)
+
+
+def test_stay_on_stops_at_an_off_site_redirect_without_following_it(site, monkeypatch):
+    from competitor_moves.core import ssrf
+    other = "127.0.0.2:9"  # would be another site; must never be contacted
+    monkeypatch.setattr(ssrf, "ALLOW_LOCAL", {site.base.removeprefix("http://"), other})
+    site.routes["/out"] = (302, {"location": f"http://{other}/landing"}, "")
+    site.routes["/in"] = (302, {"location": "/here"}, "")
+    site.routes["/here"] = (200, {}, "ok")
+    with pytest.raises(FetchError, match="redirected off-site"):
+        fetch(site.base + "/out", user_agent=UA, stay_on=site.base + "/", timeout=3, retries=1)
+    assert fetch(site.base + "/in", user_agent=UA, stay_on=site.base + "/").url == site.base + "/here"

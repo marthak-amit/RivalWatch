@@ -63,7 +63,7 @@ def test_admin_manages_users(client, make_admin):
 
     assert client.patch(f"/admin/users/{uid}", json={"is_active": False}, headers=bearer(atok)).status_code == 200
     assert client.get("/user/me", headers=bearer(utok)).status_code == 401  # deactivated user's token stops working
-    assert client.post("/user/login", json={"email": "a@test.local", "password": "password123"}).status_code == 401
+    assert client.post("/user/login", json={"email": "a@test.local", "password": "password123"}).status_code == 403  # disabled
 
     admin_id = next(u["id"] for u in client.get("/admin/users", headers=bearer(atok)).json() if u["role"] == "admin" and u["email"] == "boss@test.local")
     assert client.patch(f"/admin/users/{admin_id}", json={"is_active": False}, headers=bearer(atok)).status_code == 404  # admins untouchable via API

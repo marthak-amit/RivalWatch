@@ -3,12 +3,13 @@ import logging
 import signal
 import time
 
+from ..agents.crawl import graph as crawl_graph
 from ..db.pool import close_pool, get_pool
 from ..services import web_crawl
 from . import queue
 
 log = logging.getLogger("worker")
-HANDLERS = {"web_crawl": web_crawl.run_job}
+HANDLERS = {"web_crawl": web_crawl.run_job, "crawl_site": crawl_graph.run_job}
 
 
 def run_once(conn) -> bool:

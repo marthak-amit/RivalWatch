@@ -86,3 +86,39 @@ Differences from the Node demo, on purpose:
 - Users now have `plan`, `credits`, `api_key`, `name`, `last_login_at` (migration 0004). `GET /user/me` returns them.
 
 Note: `https://louped.btdemo.biz/robots.txt` disallows all bots except Bing's, so our crawler refuses it. That's correct for a staging site. Our own store will be read through its API (Magento, step 4), not crawled.
+
+## 8. Step 2 built (2026-10-09): change detection, crawl agent, scheduler, per-website history
+- **Per-website tables** (`site_<id>` schema): `products`, `price_history`, `crawl_runs`, `pages`, `history`. Every table has `site_id` → `public.sites` (cascade) with a check that it equals the schema's site. `history` logs every change ever detected: `run_id` → crawl_runs, `product_id` → products, `user_id` → `public.users` (who made it, for changes made in the app; null for crawls). Types: new_product, product_updated (title/SKU/barcode/brand/category/image/currency edits), price_drop, price_rise, on_sale, out_of_stock, back_in_stock, product_removed, new_category, promo_started, promo_ended, page_changed, new_page, page_removed. Deleting a workspace owner deletes their workspace; deleting another user keeps history with `user_id` cleared.
+- **Crawl agent** (LangGraph, `agents/crawl/`): nodes and prompts exactly as the agent spec; tools run one at a time; limits enforced in `services/site_crawl.py`. The product limit stops product collection only; page budget, credits, repeated 403/429 (BLOCKED) and the 10-minute limit stop everything. Shopify shop currency comes from `/meta.json`.
+- **Scheduler** (`workers/scheduler.py`): every minute queues `crawl_site` for active competitor sites whose cron (UTC, default `0 2 * * *`) is due; never twice while one is queued or running; invalid cron falls back to the default.
+- **Mapping to the UI's change types** (for step 3): new_product→product_added, product_removed→product_removed, price_drop/price_rise→price_change, promo_started→new_promo, promo_ended→promo_ended, new_page→new_page, page_removed→page_removed; others are sent with their own type and a `label`.
+- Checked against a real store (missoma.com) with real Gemini: run 1 found 20 products, 26 changes, 12 moves; run 2 reported "No changes" without calling the summarizer.
+
+
+## 9. Step 3 built (2026-10-09): the UI's /api/*, served by this backend
+- **The backend now serves the UI directly** (the UI team's `docs/integration/backend-integration.md` planned for this:
+  "the browser can talk to it directly with no UI change"). `/api/*` uses an HttpOnly `rw_session` cookie backed by the
+  same `sessions` table; errors are `{"error": ...}`; non-GET calls must be JSON (415 otherwise); login/signup are rate
+  limited. The UI pages (`public/`) are served at `/`, `/login`, `/app`, `/admin` with the original redirects and CSP.
+  The Node BFF still works against `/user`, `/admin`, `/v1` and now gets `name`, `plan`, `credits`, `created_at`, and
+  `403 Account disabled` for suspended accounts.
+- `GET /api/plans` returns the capability flags the pages read: `demo:false` (every competitor is a real website),
+  `planChanges`, `rotateKey`, `signupName`, `adminPlanEdit`, `adminResetCredits`, `adminResetPassword` true;
+  `adminRoleEdit` false (admins are managed in the database).
+- **Competitors** (`POST/PATCH/DELETE /api/competitors`, `GET /api/competitors/{id}/categories`): name, URL (SSRF-checked,
+  plan limit), `enabled` (paused sites aren't crawled or charged; enabling crawls now), `maxProducts`, `pageBudget`,
+  `categories` (scope from the site's own menu), `sort`, `cron`, `crawlSettings`. The card includes `snapshot` (25 most
+  recently seen products, `productCount`, promotions, pages, company `profile`), `since`, `crawling` and live
+  `progress` while a crawl runs.
+- `GET /api/state`, `POST /api/crawl` (waits up to `CRAWL_NOW_WAIT_SEC`), `GET /api/reports`, `POST /api/reports/summary`
+  (rule-based digest; the AI analyst comes with milestone M6), and **`GET /api/products`** with filters `competitor`,
+  `category`, `metal` (contains), `gem`, `stone`, `min_price`, `max_price`, `on_sale`, `in_stock`, `q` (word starts),
+  `sort` and facets for the dropdowns.
+- **Admin** (`/api/admin/*`): stats with plan mix and MRR, users list/create/edit plan or status/delete, reset credits,
+  reset password, audit log (stored in `audit_log`).
+- **Crawling changes from real sites** (aura_jewels, indriya.com): product pages without structured data are read from
+  their heading and price; client-side template values are never stored; pages built by JavaScript are rendered in
+  headless Chromium with every request passing the SSRF guard; Gemini reads what's left (checked); sitemaps that date
+  every URL "today" are ignored; categories come from breadcrumbs; the menu's home/brand link is not a category.
+  Per-competitor crawl settings: `delay_sec`, `time_limit_sec`, `browser`, `browser_pages`, `product_meta`,
+  `ai_extract`, `ai_extract_cap` (see `backend/README.md`).

@@ -1,8 +1,14 @@
+# Everything runs here: Postgres, migrations, the API (+ Swagger and the RivalWatch UI pages), the crawl worker and
+# the scheduler.  docker --context default compose up -d --build
 x-app: &app
   build: .
   env_file: .env
   environment:
     DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/competitor
+    PUBLIC_DIR: /srv/public
+  volumes:
+    - ../public:/srv/public:ro   # the UI's pages, served by the API at /, /login, /app, /admin
+  shm_size: "1gb"                # headless Chrome needs more shared memory than Docker's 64MB default
 
 services:
   db:
@@ -10,7 +16,7 @@ services:
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: competitor
-    ports: ["5433:5432"]   # dev only; remove in production
+    ports: ["5433:5432"]   # for DBeaver/psql on this machine; remove on a server
     volumes: [pgdata:/var/lib/postgresql/data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d competitor"]
@@ -19,14 +25,15 @@ services:
 
   migrate:
     <<: *app
-    command: ["alembic", "upgrade", "head"]
+    command: ["sh", "-c", "alembic upgrade head && python -m competitor_moves.db.site_schema"]
     depends_on:
       db: {condition: service_healthy}
     restart: "no"
 
   api:
     <<: *app
-    ports: ["8000:8000"]
+    ports: ["${API_PORT:-8031}:8000"]   # http://localhost:8031/docs (Swagger), http://localhost:8031/ (UI)
+    restart: unless-stopped
     depends_on:
       migrate: {condition: service_completed_successfully}
 
@@ -36,6 +43,14 @@ services:
     healthcheck: {disable: true}
     restart: unless-stopped
     stop_grace_period: 60s   # lets the current job finish
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+
+  scheduler:
+    <<: *app
+    command: ["python", "-m", "competitor_moves.workers.scheduler"]
+    healthcheck: {disable: true}
+    restart: unless-stopped
     depends_on:
       migrate: {condition: service_completed_successfully}
 
