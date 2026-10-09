@@ -37,6 +37,11 @@ h1,h2,h3 { line-height:1.2; margin:0; } p { margin:0; }
 .themebtn svg { width:17px; height:17px; } .themebtn .moon { display:none; }
 :root[data-theme=dark] .themebtn .sun { display:none; } :root[data-theme=dark] .themebtn .moon { display:block; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme=light]) .themebtn .sun { display:none; } :root:not([data-theme=light]) .themebtn .moon { display:block; } }
+.themerow { display:flex; align-items:center; gap:10px; width:100%; padding:9px 12px; border:1px solid var(--line); border-radius:10px; background:transparent; color:var(--ink); font:inherit; font-weight:600; cursor:pointer; }
+.themerow:hover { background:var(--acc-soft); } .themerow:focus-visible { outline:2px solid var(--acc); outline-offset:2px; }
+.themerow svg { width:18px; height:18px; color:var(--mute); } .themerow .sun { display:none; } /* the icon shows the mode you will switch to, matching the label */
+:root[data-theme=dark] .themerow .sun { display:block; } :root[data-theme=dark] .themerow .moon { display:none; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme=light]) .themerow .sun { display:block; } :root:not([data-theme=light]) .themerow .moon { display:none; } }
 .themebtn.fixed { position:fixed; top:14px; right:14px; z-index:50; }
 .err { color:var(--bad); font-size:13px; min-height:18px; }
 
