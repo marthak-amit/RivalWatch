@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     browser_pages: int = 30            # most pages rendered per site per run (each counts as a page and a credit)
     browser_channel: str = ""          # "" = Playwright's bundled Chromium, "chrome" = the installed Google Chrome
     browser_timeout_sec: int = 30
+    # Chromium on another machine (e.g. the user's own computer, by IP): a Playwright browser server's websocket,
+    # ws://<host>:3000/<BROWSER_SERVER_SECRET> (the `browser` image). Empty = launch Chromium in this process.
+    browser_ws_url: str = ""
     # pages with no structured data and no clear price: Gemini reads the visible text (prices it reads are tagged 'ai')
     ai_extract: bool = True
     ai_extract_cap: int = 30

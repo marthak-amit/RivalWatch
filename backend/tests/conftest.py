@@ -5,6 +5,7 @@ os.environ.setdefault("DATABASE_URL", "postgresql://postgres:postgres@localhost:
 os.environ.setdefault("JWT_SECRET", "test-secret-test-secret-test-secret-123")
 os.environ["CRAWL_DELAY_SEC"] = "0"
 os.environ["GEMINI_API_KEY"] = ""  # tests never call the real model (overrides .env)
+os.environ["BROWSER_WS_URL"] = ""  # tests launch their own browser (.env may point at the `browser` service)
 os.environ["CRAWL_NOW_WAIT_SEC"] = "0"
 
 import threading

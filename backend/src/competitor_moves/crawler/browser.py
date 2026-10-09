@@ -4,7 +4,15 @@ A rendered page runs the site's own scripts, and those scripts can make requests
 makes (documents, scripts, XHR/fetch, redirects) goes through the same SSRF guard as plain fetches, so a hostile site
 can't make our browser reach internal addresses (e.g. the cloud metadata service) and copy the answer into its DOM.
 Images, fonts and media are not loaded at all; service workers and websockets are blocked.
+
+The browser can run in this process or on another machine: with `ws_url` (setting BROWSER_WS_URL), the Renderer drives
+a Playwright browser server (`python -m playwright run-server`, the `browser` Docker image) over a websocket, e.g. on
+the user's own computer, reached by its IP. The guard above runs here, in the worker, for every request the remote page
+makes, so a crawled page can't reach that computer's own network (router, NAS) either.
 """
+import json
+from urllib.parse import urlsplit
+
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 from playwright.sync_api import sync_playwright
@@ -34,8 +42,8 @@ class Rendered:
 class Renderer:
     """One headless browser for one crawl run; pages open and close per URL. Call close() when the run ends."""
 
-    def __init__(self, user_agent: str, *, channel: str = "", timeout_sec: int = 30):
-        self.user_agent, self.channel, self.timeout_ms = user_agent, channel, timeout_sec * 1000
+    def __init__(self, user_agent: str, *, channel: str = "", timeout_sec: int = 30, ws_url: str = ""):
+        self.user_agent, self.channel, self.timeout_ms, self.ws_url = user_agent, channel, timeout_sec * 1000, ws_url
         self._pw = self._browser = self._context = None
         self.blocked: list[str] = []  # requests the guard refused, for the run trace
 
@@ -44,18 +52,33 @@ class Renderer:
         last = None
         for channel in dict.fromkeys([self.channel, "", "chrome"]):  # configured, then bundled Chromium, then Chrome
             try:
-                self._browser = self._pw.chromium.launch(channel=channel or None, headless=True,
-                                                         args=["--disable-dev-shm-usage"])
+                # ponytail: the guard checks hostnames with the worker's DNS, a remote browser resolves them with its
+                # own; a name that differs on that network (split-horizon) could slip through. Pin resolution with
+                # --host-resolver-rules (needs the server's --unsafe) if the browser host's network has such names.
+                if self.ws_url:  # a browser server on another machine; it launches the browser with these options
+                    options = {"headless": True, **({"channel": channel} if channel else {})}
+                    self._browser = self._pw.chromium.connect(self.ws_url, timeout=self.timeout_ms,
+                                                              headers={"x-playwright-launch-options": json.dumps(options)})
+                else:
+                    self._browser = self._pw.chromium.launch(channel=channel or None, headless=True,
+                                                             args=["--disable-dev-shm-usage"])
                 break
             except PlaywrightError as e:
                 last = e
         if self._browser is None:
             self._pw.stop()
             self._pw = None
-            raise BrowserUnavailable(str(last).splitlines()[0][:200] if last else "no browser")
+            raise BrowserUnavailable(self._safe(str(last).splitlines()[0][:200]) if last else "no browser")
         self._context = self._browser.new_context(user_agent=self.user_agent, service_workers="block")
         self._context.route("**/*", self._guard)
         self._context.route_web_socket("**/*", lambda ws: ws.close())
+
+    def _safe(self, message: str) -> str:
+        """An error message without the browser server's secret path (it is the server's only key)."""
+        if not self.ws_url:
+            return message
+        server = urlsplit(self.ws_url).netloc
+        return f"browser server {server}: " + message.replace(self.ws_url, f"ws://{server}/…")
 
     def _guard(self, route) -> None:
         req = route.request

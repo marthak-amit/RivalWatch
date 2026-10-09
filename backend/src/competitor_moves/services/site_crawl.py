@@ -242,7 +242,8 @@ class RunContext:
         s = get_settings()
         try:
             if self.renderer is None:
-                self.renderer = Renderer(s.user_agent, channel=s.browser_channel, timeout_sec=s.browser_timeout_sec)
+                self.renderer = Renderer(s.user_agent, channel=s.browser_channel, timeout_sec=s.browser_timeout_sec,
+                                         ws_url=s.browser_ws_url)
             r = self.renderer.render(url)
         except BrowserUnavailable as e:
             self.browser_unavailable = str(e)

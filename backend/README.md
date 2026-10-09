@@ -1,7 +1,7 @@
 # RivalWatch backend
 
-Python 3.12 · FastAPI · Postgres 16 · Scrapling (fetching + parsing) · headless Chromium in the worker image (pages built by JavaScript) ·
-LangGraph + Gemini (crawl agent).
+Python 3.12 · FastAPI · Postgres 16 · Scrapling (fetching + parsing) · headless Chromium in its own `browser` service,
+which can run on another computer (pages built by JavaScript) · LangGraph + Gemini (crawl agent).
 
 ## Run everything in Docker
 
@@ -9,8 +9,8 @@ All commands from `RivalWatch/backend`. This machine's Docker Desktop is off, so
 (`--context default`); run `docker context use default` once to drop the flag.
 
 ```bash
-cp .env.example .env                                  # set JWT_SECRET, APP_ENCRYPTION_KEY, GEMINI_API_KEY
-docker --context default compose up -d --build        # db, migrate, api, worker, scheduler
+cp .env.example .env              # set JWT_SECRET, APP_ENCRYPTION_KEY, GEMINI_API_KEY, BROWSER_SERVER_SECRET, BROWSER_WS_URL
+docker --context default compose up -d --build   # db, migrate, api, worker, scheduler, browser
 ```
 
 | What | Where |
@@ -22,6 +22,29 @@ docker --context default compose up -d --build        # db, migrate, api, worker
 | Postgres (DBeaver/psql) | localhost:5433, db `competitor`, user `postgres`, password from `POSTGRES_PASSWORD` |
 
 Change the API port with `API_PORT` in `.env`.
+
+### The browser on another computer (e.g. yours), reached by IP
+Chromium is the heavy part (the `browser` image, ~1.3 GB). The worker (~720 MB) has no browser inside: it drives the one
+at `BROWSER_WS_URL` over a websocket. So the browser can stay on your own computer while the backend is hosted elsewhere.
+
+| Setup | On your computer | Where the backend runs |
+|---|---|---|
+| Everything on one computer (today) | `compose up -d`, `.env`: `BROWSER_WS_URL=ws://browser:3000/<secret>` | same computer |
+| Backend hosted, browser at home/office | `compose up -d browser` (only the browser), `.env`: `BROWSER_SERVER_SECRET=<secret>` | `compose up -d db migrate api scheduler worker` (no browser), `.env`: `BROWSER_WS_URL=ws://<your computer's IP>:3000/<same secret>` |
+
+- Your computer's IP on its network: `hostname -I` (this one is on 192.168.10.x). A server on the **same network** uses
+  that IP directly. A server on the **internet** can't reach a home/office IP behind a router: forward port 3000 on the
+  router to this computer (then use the public IP), or put both machines on a private network such as Tailscale (free)
+  and use that IP. Prefer the private network: `ws://` is not encrypted.
+- The secret in the URL path is the only key: anyone with the URL can drive the browser. Make it long
+  (`python -c "import secrets; print(secrets.token_urlsafe(24))"`; the server refuses fewer than 16 characters), never
+  share it, and allow only your server: `sudo ufw allow from <server-ip> to any port 3000`.
+- Safe for your network: every request a rendered page makes is checked by the worker first, so a crawled site can't
+  make the browser on your computer reach your router, NAS or other private addresses.
+- If the browser can't be reached, crawls carry on without it (pages built by JavaScript are skipped and the run log says
+  `no browser available: browser server <host:port>: …`). Check: `docker compose logs browser`, and from the server
+  `nc -zv <your computer's IP> 3000`.
+- The worker's and the browser's Playwright versions must match (1.63.0; `Dockerfile` and `pyproject.toml`).
 
 ### Is it running, and how?
 ```bash
@@ -47,8 +70,8 @@ docker --context default compose exec worker python scripts/try_crawl.py https:/
 docker --context default compose exec worker python scripts/try_crawl.py https://www.missoma.com/ --no-ai --keep
 docker --context default compose exec worker python scripts/try_crawl.py --page https://www.missoma.com/products/<handle>
 ```
-Run it in the **worker** container: it's the image with Chromium (the `app` image used by api/scheduler/migrate has no
-browser, which keeps it small). `--keep` leaves the data in schema `site_<id>` for DBeaver.
+Run it in the **worker** container: it renders pages through the browser at `BROWSER_WS_URL` (the `app` image used by
+api/scheduler/migrate has no Playwright at all). `--keep` leaves the data in schema `site_<id>` for DBeaver.
 
 ### Create an admin (admins are only created in the database)
 ```bash
@@ -100,7 +123,8 @@ Template values (`{{name}}`) are never stored, and sitemaps that date every URL 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'
 docker --context default compose up -d db
-export DATABASE_URL=postgresql://postgres:postgres@localhost:5433/competitor BROWSER_CHANNEL=chrome
+export DATABASE_URL=postgresql://postgres:postgres@localhost:5433/competitor BROWSER_CHANNEL=chrome BROWSER_WS_URL=
+# BROWSER_WS_URL= (empty) launches Chrome locally; or ws://localhost:3000/<secret> to use the compose `browser` service
 .venv/bin/alembic upgrade head && .venv/bin/python -m competitor_moves.db.site_schema
 .venv/bin/uvicorn competitor_moves.api.main:app --port 8031 --reload
 .venv/bin/python -m competitor_moves.workers.worker
