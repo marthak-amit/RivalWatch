@@ -13,7 +13,7 @@ test('weekly vs monthly report windows and delta', () => {
   assert.equal(week.total, 5); assert.equal(week.prevTotal, 4); assert.equal(week.deltaPct, 25);
   assert.equal(month.total, 14);
   assert.equal(week.daily.reduce((s, d) => s + d.product + d.page, 0), week.total); // chart sums to headline
-  assert.equal(month.biggestMoves[0].name, 'Team'); // +20.4% is the largest move
+  assert.equal(month.biggestMoves[0].name, 'Insights Team'); // +20.4% is the largest move
   assert.ok(week.hasSample);
 });
 
