@@ -27,6 +27,8 @@ npm test
 Demo logins (seeded on first run): `demo@rivalwatch.dev` / `demo1234` · `admin@rivalwatch.dev` / `admin1234`
 (set `ADMIN_PASSWORD` to change the admin password). Other seeded customers exist only to populate the admin table.
 
+**Overview** has a competitor filter (chips, or a dropdown beyond 6 competitors). *All competitors* shows a side-by-side comparison table (products, price range, promos, pages, changes, last change; click a row to drill in). Selecting one competitor scopes the KPIs, chart, recent changes and AI summary to it, and shows its current pricing with the last change per plan, promotions, tracked pages and price history. The filter carries over to Reports and survives a reload.
+
 **Reports** show changes per day (stacked: product & price vs pages & promotions), deltas vs the previous period, by-competitor breakdown, biggest price moves, highlights, an on-demand AI summary, CSV export and print/PDF. New workspaces are pre-loaded with ~30 days of clearly-labelled *sample* history so reports aren't empty in the demo; Reset in Live demo restores it.
 
 Every user gets an isolated workspace: own crawl credits, own monitor, and own editable copies of three test competitors.

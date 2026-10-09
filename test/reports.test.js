@@ -21,3 +21,14 @@ test('empty history yields a friendly report', () => {
   const r = buildReport({ changes: [], crawlLog: [] }, 'week');
   assert.equal(r.total, 0); assert.equal(r.deltaPct, null); assert.match(r.highlights[0], /No competitor changes/);
 });
+
+test('report can be scoped to one competitor', () => {
+  const m = new Monitor(null, comps);
+  m.seedHistory();
+  const all = buildReport(m.state, 'month');
+  const one = buildReport(m.state, 'month', undefined, 'acme');
+  assert.ok(one.total > 0 && one.total < all.total);
+  assert.equal(one.total, all.byCompetitor.find((c) => c.id === 'acme').total);
+  assert.deepEqual(one.byCompetitor.map((c) => c.id), ['acme']);
+  assert.equal(buildReport(m.state, 'week', undefined, 'nope').total, 0);
+});

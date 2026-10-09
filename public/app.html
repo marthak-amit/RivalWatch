@@ -79,6 +79,9 @@
   .hbar .track { display:flex; align-items:center; gap:2px; height:16px; } .hbar .track i { display:block; height:16px; } .hbar .track i:last-of-type { border-radius:0 4px 4px 0; } .hbar .track i:hover { filter:brightness(1.14); }
   .hbar .track span { margin-left:8px; font-size:13px; font-weight:700; font-variant-numeric:tabular-nums; }
   table.t { width:100%; border-collapse:collapse; font-size:14px; } table.t th, table.t td { padding:7px 8px; border-bottom:1px solid var(--line); text-align:left; } table.t td.n, table.t th.n { text-align:right; font-variant-numeric:tabular-nums; }
+  .chip { font:inherit; font-weight:600; font-size:13px; padding:5px 12px; border-radius:99px; border:1px solid var(--line); background:var(--card); color:var(--mute); cursor:pointer; }
+  .chip:hover { border-color:var(--acc); color:var(--ink); } .chip[aria-pressed=true] { background:var(--acc-soft); border-color:var(--acc); color:var(--acc); }
+  tr.go { cursor:pointer; } tr.go:hover td { background:var(--acc-soft); }
   .linkbtn { background:none; border:0; color:var(--acc); font:inherit; font-weight:600; cursor:pointer; padding:0; } .linkbtn:hover { text-decoration:underline; }
 
   @media print {
@@ -134,6 +137,7 @@ const NAV = [['Monitor', [['overview', 'Overview'], ['competitors', 'Competitors
 const TITLES = { overview: 'Overview', competitors: 'Competitors', changes: 'Changes', reports: 'Reports', digests: 'AI digests', demo: 'Live demo', account: 'Account & API' };
 let S = null, ME = null, R = { week: null, month: null }, PLANS = {}, sig = '';
 let tab = (location.hash || '#overview').slice(1); if (!TITLES[tab]) tab = 'overview';
+let selComp = ''; try { selComp = sessionStorage.getItem('rw_comp') || ''; } catch { /* storage may be blocked */ }
 let period = 'week', showTable = false, summary = null, summarizing = false, flt = { type: '', comp: '' }, selSite = '', editMsg = 'Pick an edit, then crawl.';
 const TYPE_LABEL = { price_change: 'price change', product_added: 'product added', product_removed: 'product removed', new_promo: 'new promo', promo_ended: 'promo ended', new_page: 'new page', page_removed: 'page removed' };
 const SERIES = [['product', 'Product & price', 's1', 'var(--s1)'], ['page', 'Pages & promotions', 's2', 'var(--s2)']];
@@ -206,6 +210,29 @@ function compBars(r) {
   }));
 }
 
+// ---------- competitor filter (shared by Overview and Reports) ----------
+const setComp = (id) => { selComp = id; summary = null; try { sessionStorage.setItem('rw_comp', id); } catch { /* ignore */ } refresh(true); };
+const curComp = () => S.competitors.find((c) => c.id === selComp);
+function compFilter() {
+  const opts = [['', 'All competitors'], ...S.competitors.map((c) => [c.id, c.name])];
+  return el('div', { class: 'controls noprint', role: 'group', 'aria-label': 'Competitor filter' }, el('span', { class: 'small mute' }, 'Competitor'),
+    S.competitors.length <= 6
+      ? opts.map(([id, n]) => el('button', { class: 'chip', 'aria-pressed': String(id === selComp), onclick: () => setComp(id) }, n))
+      : el('select', { id: 'fComp2', class: 'inline', 'aria-label': 'Competitor', onchange: (e) => setComp(e.target.value) }, opts.map(([id, n]) => el('option', { value: id, selected: id === selComp }, n))));
+}
+const priceRange = (snap) => {
+  const ps = Object.values(snap?.products || {}); if (!ps.length) return 'no prices found';
+  const lo = ps.reduce((a, b) => (b.amount < a.amount ? b : a)), hi = ps.reduce((a, b) => (b.amount > a.amount ? b : a));
+  return lo === hi ? lo.price : `${lo.price} – ${hi.price}`;
+};
+const sumKey = (p) => p + '|' + selComp;
+function summaryCard(p, who) {
+  const mine = summary && summary.key === sumKey(p);
+  return el('div', { class: 'card' }, el('div', { class: 'row between wrapx' }, el('div', { class: 'h-sec', style: 'margin:0' }, `AI summary · ${who} · ${p === 'week' ? 'this week' : 'this month'}${mine ? ' · ' + (summary.source === 'claude' ? 'Claude' : 'rule-based') : ''}`),
+    btnI('sparkle', summarizing ? 'Summarising…' : mine ? 'Regenerate' : 'Generate', { class: 'btn sm', disabled: summarizing, onclick: () => genSummary(p) })),
+    mine ? el('div', { style: 'margin-top:8px' }, digestBody(summary)) : el('p', { class: 'mute', style: 'margin-top:6px' }, `Get a short summary and suggested actions for ${who}.`));
+}
+
 // ---------- shared cards ----------
 const kpi = (v, l, d, extra) => el('div', { class: 'card kpi' }, el('div', { class: 'l' }, l), el('div', { class: 'v' }, String(v)), d && el('div', { class: 'd' }, d), extra);
 const delta = (r) => r.deltaPct == null ? (r.total ? 'no earlier data to compare' : '') : `${r.deltaPct > 0 ? '▲' : r.deltaPct < 0 ? '▼' : '■'} ${Math.abs(r.deltaPct)}% vs previous ${r.days} days`;
@@ -220,21 +247,61 @@ function digestCard() {
 }
 const changeItem = (c) => el('li', {}, el('span', { class: 'tag ' + c.type }, TYPE_LABEL[c.type] || c.type), el('b', {}, c.competitor + ': '), c.label,
   el('div', { class: 'small mute' }, fmtTime(c.ts), c.sample && el('span', { class: 'pill', style: 'margin-left:8px', title: 'Pre-loaded demo history' }, 'sample')));
-function changesCard(limit) {
-  return el('div', { class: 'card' }, el('div', { class: 'row between' }, el('div', { class: 'h-sec', style: 'margin:0' }, 'Recent changes'), el('button', { class: 'linkbtn', onclick: () => go('changes') }, 'View all →')),
-    S.changes.length ? el('ul', { class: 'plain' }, S.changes.slice(0, limit).map(changeItem)) : el('p', { class: 'mute' }, 'No changes yet.'));
+function changesCard(limit, scoped = false) {
+  const list = scoped && selComp ? S.changes.filter((c) => c.competitorId === selComp) : S.changes;
+  return el('div', { class: 'card' }, el('div', { class: 'row between' }, el('div', { class: 'h-sec', style: 'margin:0' }, 'Recent changes' + (scoped && curComp() ? ' · ' + curComp().name : '')), el('button', { class: 'linkbtn', onclick: () => { if (scoped && selComp) flt = { type: '', comp: curComp()?.name || '' }; go('changes'); } }, 'View all →')),
+    list.length ? el('ul', { class: 'plain' }, list.slice(0, limit).map(changeItem)) : el('p', { class: 'mute' }, 'No changes yet.'));
 }
 
 // ---------- views ----------
-function overview() {
-  const w = R.week, used = S.plan.credits - S.credits;
+function overview() { const c = curComp(); return [compFilter(), c ? overviewOne(c, R.week) : overviewAll(R.week)]; }
+
+function overviewAll(w) {
+  const used = S.plan.credits - S.credits;
+  const rows = S.competitors.map((c) => {
+    const snap = c.snapshot, n = w.byCompetitor.find((x) => x.id === c.id), last = S.changes.find((x) => x.competitorId === c.id);
+    return el('tr', { class: 'go', tabindex: 0, onclick: () => setComp(c.id), onkeydown: (e) => e.key === 'Enter' && setComp(c.id) },
+      el('td', {}, el('b', {}, c.name), c.error && el('div', { class: 'err' }, c.error)), el('td', { class: 'n' }, snap ? Object.keys(snap.products).length : '–'), el('td', { class: 'n' }, snap ? priceRange(snap) : '–'),
+      el('td', { class: 'n' }, snap ? snap.promotions.length : '–'), el('td', { class: 'n' }, snap ? snap.pages.length : '–'), el('td', { class: 'n' }, n ? n.total : 0),
+      el('td', { class: 'n' }, last ? ago(last.ts) : '–'), el('td', {}, el('span', { class: 'linkbtn' }, 'View →')));
+  });
   return [
     el('div', { class: 'grid g4', style: 'margin-bottom:14px' },
       kpi(w.total, 'Changes this week', delta(w)), kpi(`${S.competitors.length}/${S.plan.competitors}`, 'Competitors monitored', S.plan.name + ' plan limit'),
       kpi(S.credits.toLocaleString(), 'Credits left', `${used.toLocaleString()} used of ${S.plan.credits.toLocaleString()}`, el('div', { class: 'bar2' }, el('i', { style: `width:${Math.max(0, Math.min(100, S.credits / S.plan.credits * 100))}%` }))),
       kpi(S.lastRun ? ago(S.lastRun) : '–', 'Last crawl', `${w.crawls.count} crawls this week`)),
     el('div', { style: 'margin-bottom:14px' }, activityCard(w, { weekly: true, linkToReports: true })),
-    el('div', { class: 'grid g2' }, digestCard(), changesCard(6)),
+    el('div', { class: 'card', style: 'margin-bottom:14px' }, el('div', { class: 'h-sec' }, 'Competitor comparison · click a row for details'),
+      S.competitors.length ? el('div', { class: 'scroll' }, el('table', { class: 't' }, el('thead', {}, el('tr', {}, ['Competitor', 'Products', 'Price range', 'Promos', 'Pages', 'Changes (7d)', 'Last change', ''].map((h, i) => el('th', { class: i > 0 && i < 7 ? 'n' : '' }, h)))), el('tbody', {}, rows)))
+        : el('p', { class: 'mute' }, 'No competitors yet. Add one from the sidebar.')),
+    el('div', { class: 'grid g2' }, digestCard(), changesCard(6, true)),
+  ];
+}
+
+function overviewOne(c, w) {
+  const snap = c.snapshot, prods = snap ? Object.values(snap.products) : [];
+  const history = S.changes.filter((x) => x.competitorId === c.id && x.type === 'price_change');
+  const lastFor = (name) => history.find((h) => h.name.toLowerCase() === name.toLowerCase());
+  const pricing = el('div', { class: 'card' },
+    el('div', { class: 'row between wrapx' }, el('div', {}, el('b', {}, c.name), el('div', { class: 'small' }, el('a', { href: c.url, target: '_blank', rel: 'noopener noreferrer' }, c.url))), snap && el('span', { class: 'small mute' }, 'Snapshot ' + ago(snap.ts))),
+    c.error && el('div', { class: 'err' }, c.error),
+    el('div', { class: 'h-sec', style: 'margin-top:14px' }, 'Current pricing'),
+    prods.length ? el('div', { class: 'scroll' }, el('table', { class: 't' }, el('thead', {}, el('tr', {}, el('th', {}, 'Plan'), el('th', { class: 'n' }, 'Price'), el('th', {}, 'Last change'))),
+      el('tbody', {}, prods.map((p) => { const h = lastFor(p.name); return el('tr', {}, el('td', {}, p.name), el('td', { class: 'n' }, el('b', {}, p.price)),
+        el('td', { class: 'small mute' }, h ? `${h.from} → ${h.to} (${h.pct > 0 ? '+' : ''}${h.pct}%) · ${ago(h.ts)}` : 'no change recorded')); })))) : el('p', { class: 'mute' }, snap ? 'No prices found on the crawled pages.' : 'Baseline crawl pending…'),
+    el('div', { class: 'h-sec', style: 'margin-top:14px' }, 'Promotions'),
+    snap && snap.promotions.length ? el('ul', { class: 'plain' }, snap.promotions.map((x) => el('li', {}, '🏷 ' + x))) : el('p', { class: 'mute' }, 'No active promotions detected.'),
+    el('div', { class: 'h-sec', style: 'margin-top:14px' }, 'Pages tracked'),
+    el('div', { class: 'row wrapx', style: 'gap:6px' }, snap ? snap.pages.map((x) => el('span', { class: 'pill' }, x)) : null));
+  return [
+    el('div', { class: 'grid g4', style: 'margin-bottom:14px' },
+      kpi(w.total, 'Changes this week', delta(w)), kpi(prods.length, 'Products tracked', snap ? priceRange(snap) : 'baseline pending'),
+      kpi(snap ? snap.pages.length : '–', 'Pages tracked', snap ? `${snap.pagesCrawled} crawled last run` : ''), kpi(snap ? snap.promotions.length : '–', 'Active promotions', snap?.promotions[0] || 'none detected')),
+    el('div', { style: 'margin-bottom:14px' }, activityCard(w, { weekly: true, linkToReports: true })),
+    el('div', { class: 'grid g2', style: 'margin-bottom:14px' }, pricing, el('div', { class: 'stack' }, summaryCard('week', c.name), changesCard(5, true))),
+    history.length ? el('div', { class: 'card' }, el('div', { class: 'h-sec' }, 'Price history'), el('div', { class: 'scroll' }, el('table', { class: 't' },
+      el('thead', {}, el('tr', {}, ['Date', 'Plan', 'From', 'To', 'Change'].map((h, i) => el('th', { class: i > 1 ? 'n' : '' }, h)))),
+      el('tbody', {}, history.map((h) => el('tr', {}, el('td', {}, fmtTime(h.ts), h.sample && el('span', { class: 'pill', style: 'margin-left:8px' }, 'sample')), el('td', {}, h.name), el('td', { class: 'n' }, h.from), el('td', { class: 'n' }, h.to), el('td', { class: 'n' }, el('b', {}, (h.pct > 0 ? '+' : '') + h.pct + '%'))))))) ) : null,
   ];
 }
 
@@ -272,20 +339,21 @@ function changes() {
 }
 
 function reports() {
-  const r = R[period], weekly = period === 'week';
+  const r = R[period], weekly = period === 'week', one = curComp();
   const range = `${fmtDay(r.from, { month: 'short', day: 'numeric' })} – ${fmtDay(r.to, { month: 'short', day: 'numeric', year: 'numeric' })}`;
   return [
+    compFilter(),
     el('div', { class: 'controls noprint' },
-      el('div', { class: 'seg', role: 'group', 'aria-label': 'Report period' }, ['week', 'month'].map((p) => el('button', { 'aria-pressed': String(p === period), onclick: () => { period = p; summary = null; paintView(); } }, p === 'week' ? 'Weekly' : 'Monthly'))),
+      el('div', { class: 'seg', role: 'group', 'aria-label': 'Report period' }, ['week', 'month'].map((p) => el('button', { 'aria-pressed': String(p === period), onclick: () => { period = p; paintView(); } }, p === 'week' ? 'Weekly' : 'Monthly'))),
       el('span', { class: 'mute' }, range), el('span', { style: 'flex:1' }),
-      btnI('sparkle', summarizing ? 'Summarising…' : 'AI summary', { disabled: summarizing || !r.total, onclick: genSummary }), btnI('download', 'Export CSV', { onclick: () => exportCsv(r) }), btnI('printer', 'Print / PDF', { onclick: () => print() })),
+      btnI('sparkle', summarizing ? 'Summarising…' : 'AI summary', { disabled: summarizing || !r.total, onclick: () => genSummary(period) }), btnI('download', 'Export CSV', { onclick: () => exportCsv(r) }), btnI('printer', 'Print / PDF', { onclick: () => print() })),
     el('div', { class: 'grid g4', style: 'margin-bottom:14px' },
       kpi(r.total, 'Total changes', delta(r)), kpi(r.bySignal.product, 'Product & price changes', `${r.byType.price_change || 0} price move${(r.byType.price_change || 0) === 1 ? '' : 's'}`),
-      kpi(r.bySignal.page, 'Pages & promotions', `${r.byType.new_promo || 0} promo · ${r.byType.new_page || 0} new page${(r.byType.new_page || 0) === 1 ? '' : 's'}`), kpi(r.crawls.count, 'Crawls run', `${r.crawls.pages} pages scanned · ${r.crawls.withChanges} found changes`)),
+      kpi(r.bySignal.page, 'Pages & promotions', `${r.byType.new_promo || 0} promo · ${r.byType.new_page || 0} new page${(r.byType.new_page || 0) === 1 ? '' : 's'}`), one ? kpi(one.snapshot ? one.snapshot.pages.length : '–', 'Pages tracked', one.name) : kpi(r.crawls.count, 'Crawls run', `${r.crawls.pages} pages scanned · ${r.crawls.withChanges} found changes`)),
     el('div', { style: 'margin-bottom:14px' }, activityCard(r, { weekly, withTable: true })),
-    summary && el('div', { class: 'card', style: 'margin-bottom:14px' }, el('div', { class: 'h-sec' }, `AI summary · ${weekly ? 'weekly' : 'monthly'} · ${summary.source === 'claude' ? 'Claude' : 'rule-based'}`), digestBody(summary)),
-    el('div', { class: 'grid g2', style: 'margin-bottom:14px' },
-      el('div', { class: 'card' }, el('div', { class: 'h-sec' }, 'By competitor'), legend(), compBars(r)),
+    summary && summary.key === sumKey(period) && el('div', { class: 'card', style: 'margin-bottom:14px' }, el('div', { class: 'h-sec' }, `AI summary · ${one ? one.name + ' · ' : ''}${weekly ? 'weekly' : 'monthly'} · ${summary.source === 'claude' ? 'Claude' : 'rule-based'}`), digestBody(summary)),
+    el('div', { class: 'grid ' + (one ? 'g1' : 'g2'), style: 'margin-bottom:14px' },
+      one ? null : el('div', { class: 'card' }, el('div', { class: 'h-sec' }, 'By competitor'), legend(), compBars(r)),
       el('div', { class: 'card' }, el('div', { class: 'h-sec' }, 'Highlights'),
         el('ul', { class: 'plain' }, r.highlights.map((h) => el('li', {}, h))),
         Object.keys(r.byType).length ? el('div', { style: 'margin-top:10px' }, el('div', { class: 'h-sec' }, 'By type'), el('ul', { class: 'plain' }, Object.entries(r.byType).sort((a, b) => b[1] - a[1]).map(([t, n]) => el('li', { class: 'row between' }, el('span', { class: 'tag ' + t }, TYPE_LABEL[t] || t), el('b', { class: 'price' }, n))))) : null)),
@@ -332,7 +400,7 @@ function account() {
       el('pre', {}, `curl -H "x-api-key: ${key.slice(0, 7)}…" "${base}/v1/credits/balance"\ncurl -H "x-api-key: …" "${base}/v1/web/scrape?url=https://example.com"\ncurl -X POST -H "x-api-key: …" -H "content-type: application/json" \\\n  ${base}/v1/web/crawl -d '{"url":"https://example.com","max_depth":1,"limit":5}'`))];
 }
 const VIEWS = { overview, competitors, changes, reports, digests, demo, account };
-const SUBS = { overview: () => S.lastRun ? 'Last crawl ' + ago(S.lastRun) : 'Baseline crawl running…', competitors: () => `${S.competitors.length} of ${S.plan.competitors} sites`, changes: () => `${S.changes.length} detected in total`, reports: () => 'Weekly and monthly competitor activity', digests: () => 'AI-written summaries and actions', demo: () => 'Edit a test page, then crawl', account: () => 'Plan, billing and API access' };
+const SUBS = { overview: () => (curComp() ? curComp().name + ' · ' : '') + (S.lastRun ? 'Last crawl ' + ago(S.lastRun) : 'Baseline crawl running…'), competitors: () => `${S.competitors.length} of ${S.plan.competitors} sites`, changes: () => `${S.changes.length} detected in total`, reports: () => 'Weekly and monthly competitor activity', digests: () => 'AI-written summaries and actions', demo: () => 'Edit a test page, then crawl', account: () => 'Plan, billing and API access' };
 
 // ---------- actions ----------
 async function crawlNow() { if (S.running) return; document.querySelectorAll('#sCrawl').forEach((b) => (b.disabled = true)); toast('Crawling…'); try { await api('/api/crawl', { method: 'POST' }); await refresh(true); toast('Crawl complete'); } catch (e) { toast(e.message); } }
@@ -342,7 +410,7 @@ async function addComp(e) { e.preventDefault(); $('cerr').textContent = ''; try 
 async function removeComp(c) { if (!confirm(`Stop monitoring ${c.name}?`)) return; await api('/api/competitors/' + c.id, { method: 'DELETE' }); await refresh(true); }
 async function changePlan(p) { await api('/api/me/plan', { method: 'POST', body: { plan: p.id } }); toast('Switched to ' + p.name); await refresh(true); }
 async function rotate() { if (!confirm('Rotate the API key? The old key stops working.')) return; await api('/api/me/rotate-key', { method: 'POST' }); await refresh(true); toast('New key issued'); }
-async function genSummary() { summarizing = true; paintView(); try { summary = await api('/api/reports/summary', { method: 'POST', body: { period } }); } catch (e) { toast(e.message); } summarizing = false; paintView(); }
+async function genSummary(p = period) { summarizing = true; paintView(); try { summary = { key: sumKey(p), ...(await api('/api/reports/summary', { method: 'POST', body: { period: p, competitor: selComp } })) }; } catch (e) { toast(e.message); } summarizing = false; paintView(); }
 function exportCsv(r) {
   const safe = (v) => { v = String(v ?? ''); if (/^[=+\-@\t\r]/.test(v)) v = "'" + v; return '"' + v.replace(/"/g, '""') + '"'; };
   const rows = [['date', 'competitor', 'type', 'description', 'sample'], ...r.changes.map((c) => [c.ts, c.competitor, c.type, c.label, c.sample])];
@@ -373,11 +441,14 @@ function paintShell() {
   $('user').replaceChildren(el('div', { class: 'av' }, ME.name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase()),
     el('div', { class: 'meta' }, el('b', {}, ME.name), el('span', { class: 'small mute' }, ME.email)), el('button', { class: 'iconbtn', 'aria-label': 'Sign out', title: 'Sign out', onclick: logout }, icon('logout')));
 }
-function paintView() { hideTip(); $('view').replaceChildren(...[VIEWS[tab]()].flat().filter(Boolean)); paintShell(); }
+function paintView() { hideTip(); $('view').replaceChildren(...[VIEWS[tab]()].flat(Infinity).filter(Boolean)); paintShell(); }
 async function refresh(force) {
-  [S, ME, R.week, R.month] = await Promise.all([api('/api/state'), api('/api/me'), api('/api/reports?period=week'), api('/api/reports?period=month')]);
-  const next = [S.runs, S.running, S.changes.length, S.competitors.length, S.credits, S.digest?.ts, ME.plan, S.competitors.map((c) => c.snapshots + (c.error || '')).join()].join('|');
-  const typing = ['cn', 'cu', 'site', 'fType', 'fComp'].includes(document.activeElement?.id);
+  S = await api('/api/state');
+  if (selComp && !S.competitors.some((c) => c.id === selComp)) selComp = '';
+  const q = '&competitor=' + encodeURIComponent(selComp);
+  [ME, R.week, R.month] = await Promise.all([api('/api/me'), api('/api/reports?period=week' + q), api('/api/reports?period=month' + q)]);
+  const next = [selComp, S.runs, S.running, S.changes.length, S.competitors.length, S.credits, S.digest?.ts, ME.plan, S.competitors.map((c) => c.snapshots + (c.error || '')).join()].join('|');
+  const typing = ['cn', 'cu', 'site', 'fType', 'fComp', 'fComp2'].includes(document.activeElement?.id);
   paintShell();
   if (force || (next !== sig && !typing)) { sig = next; paintView(); }
 }

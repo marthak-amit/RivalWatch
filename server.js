@@ -65,6 +65,7 @@ const currentUser = (req) => {
   const u = id && users.byId(id);
   return u && u.status === 'active' ? u : null;
 };
+const cleanId = (v) => (/^\w{1,20}$/.test(String(v ?? '')) ? String(v) : ''); // competitor ids are short \w tokens
 const fail = (res, status, error) => send(res, status, { error });
 const PAGES = { '/': 'index.html', '/login': 'login.html', '/app': 'app.html', '/admin': 'admin.html', '/style.css': 'style.css', '/common.js': 'common.js' };
 const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript' };
@@ -174,13 +175,14 @@ http.createServer(async (req, res) => {
       const dc = p.match(/^\/api\/competitors\/(\w+)$/);
       if (dc && M === 'DELETE') { ws.monitor.remove(dc[1]); return send(res, 200, { ok: true }); }
       if (p === '/api/reports' && M === 'GET') {
-        return send(res, 200, buildReport(ws.monitor.state, url.searchParams.get('period') === 'month' ? 'month' : 'week'));
+        return send(res, 200, buildReport(ws.monitor.state, url.searchParams.get('period') === 'month' ? 'month' : 'week', undefined, cleanId(url.searchParams.get('competitor'))));
       }
       if (p === '/api/reports/summary' && M === 'POST') {
-        const { period } = await readJson(req);
-        const r = buildReport(ws.monitor.state, period === 'month' ? 'month' : 'week');
+        const { period, competitor } = await readJson(req);
+        const comp = cleanId(competitor);
+        const r = buildReport(ws.monitor.state, period === 'month' ? 'month' : 'week', undefined, comp);
         if (!r.total) return fail(res, 400, 'No changes in this period to summarise');
-        const inRange = ws.monitor.state.changes.filter((c) => c.ts.slice(0, 10) >= r.from);
+        const inRange = ws.monitor.state.changes.filter((c) => c.ts.slice(0, 10) >= r.from && (!comp || c.competitorId === comp));
         return send(res, 200, await makeDigest(inRange));
       }
       if (p === '/api/test/edit' && M === 'POST') {
