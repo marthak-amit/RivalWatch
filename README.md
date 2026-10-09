@@ -37,6 +37,8 @@ Demo logins (seeded on first run): `demo@rivalwatch.dev` / `demo1234` · `admin@
 Every user gets an isolated workspace: own crawl credits, own monitor, and own editable copies of three test competitors.
 Billing is a mock: switching plans just resets the credit allowance.
 
+Light and dark mode: every page has a sun/moon button. By default the site follows your system setting; the button saves your choice in this browser (`public/theme.js`).
+
 ## Running with the Python backend
 
 `BACKEND_URL=http://localhost:8000 npm start` puts this server in front of the Python backend in `backend/`: login, signup,

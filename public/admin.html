@@ -5,9 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Admin: RivalWatch</title>
 <link rel="stylesheet" href="/style.css">
+<script src="/theme.js"></script>
 <style>
   header.bar { background:#1b1d2b; color:#fff; } header.bar .wrap { display:flex; align-items:center; justify-content:space-between; height:58px; gap:12px; flex-wrap:wrap; }
-  header.bar .logo { color:#fff; } header.bar .btn { background:transparent; color:#fff; border-color:#3b3f55; }
+  header.bar .logo { color:#fff; } header.bar .btn { background:transparent; color:#fff; border-color:#3b3f55; } header.bar .themebtn { background:transparent; color:#cbd0e0; border-color:#3b3f55; } header.bar .themebtn:hover { color:#fff; }
   main { padding:22px 0 60px; }
   .dist { display:flex; height:12px; border-radius:99px; overflow:hidden; background:var(--line); margin:10px 0 8px; }
   .dist i { display:block; height:100%; } .lg { display:flex; gap:14px; flex-wrap:wrap; font-size:13px; } .lg b { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:6px; }
@@ -21,7 +22,7 @@
 <body>
 <header class="bar"><div class="wrap">
   <div class="row"><a class="logo" href="/">RivalWatch</a><span class="pill" style="background:#3b3f55;color:#fff">Admin</span></div>
-  <div class="row wrapx"><span class="small" id="who" style="opacity:.8"></span><a class="btn sm" href="/app">My dashboard</a><button class="btn sm" id="out">Sign out</button></div>
+  <div class="row wrapx"><span data-theme-slot></span><span class="small" id="who" style="opacity:.8"></span><a class="btn sm" href="/app">My dashboard</a><button class="btn sm" id="out">Sign out</button></div>
 </div></header>
 
 <main class="wrap">

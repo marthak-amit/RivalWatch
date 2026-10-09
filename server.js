@@ -78,7 +78,7 @@ const currentUser = async (req) => {
 };
 const cleanId = (v) => (/^\w{1,20}$/.test(String(v ?? '')) ? String(v) : ''); // competitor ids are short \w tokens
 const fail = (res, status, error) => send(res, status, { error });
-const PAGES = { '/': 'index.html', '/login': 'login.html', '/app': 'app.html', '/admin': 'admin.html', '/style.css': 'style.css', '/common.js': 'common.js' };
+const PAGES = { '/': 'index.html', '/login': 'login.html', '/app': 'app.html', '/admin': 'admin.html', '/style.css': 'style.css', '/common.js': 'common.js', '/theme.js': 'theme.js' };
 const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript' };
 
 const meView = (u) => ({ ...publicUser(u), apiKey: u.apiKey, plan: u.plan, planInfo: PLANS[u.plan], ...(BACKEND ? { credits: u.credits } : {}) });

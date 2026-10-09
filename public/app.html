@@ -5,10 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dashboard: RivalWatch</title>
 <link rel="stylesheet" href="/style.css">
+<script src="/theme.js"></script>
 <style>
   /* chart palette: categorical slots 1-2, validated light + dark (scripts/validate_palette.js) */
   :root { --s1:#2a78d6; --s2:#eb6834; --side:#fff; --side-hover:#f1f3f9; --surface-1:var(--card); }
-  @media (prefers-color-scheme: dark) { :root { --s1:#3987e5; --s2:#d95926; --side:#12141a; --side-hover:#1d2029; } }
+  :root[data-theme=dark] { --s1:#3987e5; --s2:#d95926; --side:#12141a; --side-hover:#1d2029; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme=light]) { --s1:#3987e5; --s2:#d95926; --side:#12141a; --side-hover:#1d2029; } }
 
   .shell { min-height:100vh; }
   /* Pinned to the viewport edges (not sticky/100vh) so it can never move or be scrolled, whatever the browser toolbar does */
@@ -89,7 +91,8 @@
   .switch .tr::after { content:""; position:absolute; top:3px; left:3px; width:16px; height:16px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.35); transition:transform .2s; }
   .switch[aria-checked=true] .tr { background:var(--good); } .switch[aria-checked=true] .tr::after { transform:translateX(18px); }
   .switch .lb { color:#b42318; } .switch[aria-checked=true] .lb { color:#05603a; } .switch.err .lb { color:#b42318; }
-  @media (prefers-color-scheme: dark) { .switch .lb, .switch.err .lb { color:#fda29b; } .switch[aria-checked=true] .lb { color:#6ce9a6; } }
+  :root[data-theme=dark] .switch .lb, :root[data-theme=dark] .switch.err .lb { color:#fda29b; } :root[data-theme=dark] .switch[aria-checked=true] .lb { color:#6ce9a6; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme=light]) .switch .lb, :root:not([data-theme=light]) .switch.err .lb { color:#fda29b; } :root:not([data-theme=light]) .switch[aria-checked=true] .lb { color:#6ce9a6; } }
   .switch[aria-busy=true] { opacity:.6; pointer-events:none; }
   /* small status icon next to a competitor's name: green = enabled & working, red = disabled or failing */
   .sdot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:8px; vertical-align:middle; flex:none; background:var(--good); box-shadow:0 0 0 3px color-mix(in srgb, var(--good) 25%, transparent); transition:background .2s, box-shadow .2s; }
@@ -136,7 +139,7 @@
   </aside>
   <div class="scrim" id="scrim"></div>
   <div class="content">
-    <header class="topbar"><button class="iconbtn" id="burger" aria-label="Open menu"></button><div><h1 id="title"></h1><div class="sub" id="sub"></div></div><span class="autocrawl noprint" id="sNext" title="Time until the next scheduled crawl"></span></header>
+    <header class="topbar"><button class="iconbtn" id="burger" aria-label="Open menu"></button><div><h1 id="title"></h1><div class="sub" id="sub"></div></div><span class="autocrawl noprint" id="sNext" title="Time until the next scheduled crawl"></span><span data-theme-slot class="noprint"></span></header>
     <main id="view"></main>
   </div>
 </div>

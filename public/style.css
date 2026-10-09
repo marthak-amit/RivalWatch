@@ -1,6 +1,9 @@
 :root { --bg:#f7f8fa; --card:#fff; --ink:#14171f; --mute:#657085; --line:#e4e7ec; --acc:#4f46e5; --acc-ink:#fff; --acc-soft:#eef0ff;
   --good:#12b76a; --bad:#e5392c; --warn:#d97706; --shadow:0 1px 2px rgba(16,24,40,.06),0 8px 24px rgba(16,24,40,.06); }
-@media (prefers-color-scheme: dark) { :root { --bg:#0e1015; --card:#171a21; --ink:#eef0f4; --mute:#9aa4b5; --line:#272c36; --acc:#8b87ff; --acc-ink:#0e1015; --acc-soft:#23244a; --shadow:none; } }
+:root { color-scheme:light; }
+/* Dark palette: applied when the visitor picked dark (data-theme), or follows the system unless they picked light */
+:root[data-theme=dark] { color-scheme:dark; --bg:#0e1015; --card:#171a21; --ink:#eef0f4; --mute:#9aa4b5; --line:#272c36; --acc:#8b87ff; --acc-ink:#0e1015; --acc-soft:#23244a; --shadow:none; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme=light]) { color-scheme:dark; --bg:#0e1015; --card:#171a21; --ink:#eef0f4; --mute:#9aa4b5; --line:#272c36; --acc:#8b87ff; --acc-ink:#0e1015; --acc-soft:#23244a; --shadow:none; } }
 * { box-sizing:border-box; }
 html { scroll-behavior:smooth; }
 body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif; }
@@ -26,7 +29,15 @@ h1,h2,h3 { line-height:1.2; margin:0; } p { margin:0; }
 .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; box-shadow:var(--shadow); }
 .pill { display:inline-block; padding:2px 10px; border-radius:99px; font-size:12px; font-weight:600; background:var(--line); color:var(--mute); }
 .pill.acc { background:var(--acc-soft); color:var(--acc); } .pill.good { background:#d1fadf; color:#05603a; } .pill.bad { background:#fee4e2; color:#b42318; }
-@media (prefers-color-scheme: dark) { .pill.good { background:#0b3d27; color:#6ce9a6; } .pill.bad { background:#4a1612; color:#fda29b; } }
+:root[data-theme=dark] .pill.good { background:#0b3d27; color:#6ce9a6; } :root[data-theme=dark] .pill.bad { background:#4a1612; color:#fda29b; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme=light]) .pill.good { background:#0b3d27; color:#6ce9a6; } :root:not([data-theme=light]) .pill.bad { background:#4a1612; color:#fda29b; } }
+/* theme toggle (public/theme.js) */
+.themebtn { display:inline-grid; place-items:center; width:34px; height:34px; padding:0; border-radius:99px; border:1px solid var(--line); background:var(--card); color:var(--mute); cursor:pointer; flex:none; }
+.themebtn:hover { color:var(--ink); border-color:var(--mute); } .themebtn:focus-visible { outline:2px solid var(--acc); outline-offset:2px; }
+.themebtn svg { width:17px; height:17px; } .themebtn .moon { display:none; }
+:root[data-theme=dark] .themebtn .sun { display:none; } :root[data-theme=dark] .themebtn .moon { display:block; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme=light]) .themebtn .sun { display:none; } :root:not([data-theme=light]) .themebtn .moon { display:block; } }
+.themebtn.fixed { position:fixed; top:14px; right:14px; z-index:50; }
 .err { color:var(--bad); font-size:13px; min-height:18px; }
 
 label { display:block; font-size:13px; font-weight:600; margin:0 0 4px; }

@@ -6,10 +6,12 @@
 <title>RivalWatch: AI competitor intelligence</title>
 <meta name="description" content="Track competitor prices, products, promotions and new pages. Get an AI digest with suggested actions.">
 <link rel="stylesheet" href="/style.css">
+<script src="/theme.js"></script>
 <script>document.documentElement.classList.add('js')</script>
 <style>
   :root { --cyan:#06b6d4; --pink:#ec4899; --glow-a:.34; }
-  @media (prefers-color-scheme: dark) { :root { --glow-a:.26; } }
+  :root[data-theme=dark] { --glow-a:.26; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme=light]) { --glow-a:.26; } }
   html { scroll-padding-top:70px; }
   html, body { overflow-x:hidden; overflow-x:clip; }
 
@@ -68,7 +70,8 @@
   @keyframes slidein { from { opacity:0; transform:translateY(-14px); max-height:0; } to { opacity:1; transform:none; max-height:60px; } }
   .float { position:absolute; z-index:3; padding:7px 12px; border-radius:12px; font-weight:700; font-size:13px; background:var(--card); border:1px solid var(--line); box-shadow:var(--shadow), 0 10px 30px rgba(16,24,40,.12); white-space:nowrap; animation:float 6s ease-in-out infinite; }
   .float.f1 { top:-18px; right:6%; color:#05603a; } .float.f2 { bottom:-16px; left:-14px; color:var(--acc); animation-delay:-3s; }
-  @media (prefers-color-scheme: dark) { .float.f1 { color:#6ce9a6; } }
+  :root[data-theme=dark] .float.f1 { color:#6ce9a6; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme=light]) .float.f1 { color:#6ce9a6; } }
   @keyframes float { 50% { transform:translateY(-10px); } }
   @media (max-width:940px) { .stage::before { inset:0; } .float.f1 { right:2%; } }
   @media (max-width:520px) { .float.f2 { left:0; } }
@@ -145,7 +148,7 @@
 <nav class="top" id="nav"><div class="wrap">
   <a class="logo" href="/">RivalWatch</a>
   <div class="links"><a href="#how">How it works</a><a href="#features">Features</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a></div>
-  <div class="row"><a class="btn" id="signin" href="/login">Sign in</a><a class="btn primary" href="#pricing">Get started</a></div>
+  <div class="row"><span data-theme-slot></span><a class="btn" id="signin" href="/login">Sign in</a><a class="btn primary" href="#pricing">Get started</a></div>
 </div></nav>
 
 <header class="hero"><div class="wrap">
@@ -299,7 +302,7 @@ if (cu && !REDUCED && io) { const t = +cu.dataset.to; cu.textContent = '0'; cons
   const c = $('net'), ctx = c.getContext('2d'); let W, H, pts = [], pulses = [], mouse = null, rgb = [79, 70, 229], raf;
   const dpr = Math.min(devicePixelRatio || 1, 2);
   const readColor = () => { const h = getComputedStyle(document.documentElement).getPropertyValue('--acc').trim().replace('#', ''); if (h.length === 6) rgb = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)); };
-  matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', readColor); readColor();
+  matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', readColor); addEventListener('rv-theme', readColor); readColor();
   function size() { W = c.clientWidth; H = c.clientHeight; c.width = W * dpr; c.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const n = Math.min(70, Math.floor((W * H) / 24000)); pts = Array.from({ length: n }, () => ({ x: Math.random() * W, y: Math.random() * H, vx: (Math.random() - .5) * .35, vy: (Math.random() - .5) * .35 })); }
   addEventListener('resize', size); size();
