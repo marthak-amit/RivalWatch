@@ -18,6 +18,7 @@ URLS_PER_FILE = 50_000                # protocol limit; used to estimate unread 
 class Entry:
     loc: str
     lastmod: datetime | None
+    source: str = ""  # the sitemap file this URL was listed in
 
 
 @dataclass
@@ -126,7 +127,7 @@ def collect(fetch: Callable[[str], Page], roots: list[str], *, since: datetime |
                     queue.append(e.loc)
         else:
             room = max_urls - len(scan.urls)
-            scan.urls.extend(sm.entries[:room])
+            scan.urls.extend(Entry(e.loc, e.lastmod, loc) for e in sm.entries[:room])
             if len(sm.entries) > room:
                 scan.truncated = True
     return scan

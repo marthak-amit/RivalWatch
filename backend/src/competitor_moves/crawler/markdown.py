@@ -23,6 +23,13 @@ def html_to_markdown(html: str, base_url: str) -> dict:
 
     m = re.search(r"<title[^>]*>([\s\S]*?)</title>", html, _I)
     title = unescape(m.group(1)).strip() if m else ""
+    description = ""
+    for key in ("description", "og:description"):
+        tag = re.search(rf"<meta[^>]+(?:name|property)=[\"']{key}[\"'][^>]*>", html, _I)
+        content = re.search(r"content=[\"']([^\"']*)[\"']", tag.group(0), _I) if tag else None
+        if content and content.group(1).strip():
+            description = unescape(content.group(1)).strip()
+            break
     md = re.sub(r"<(script|style|noscript|svg|head|template)\b[\s\S]*?</\1>", "", html, flags=_I)
     md = re.sub(r"<!--[\s\S]*?-->", "", md)
     md = re.sub(r"<h([1-4])[^>]*>([\s\S]*?)</h\1>", lambda x: f"\n\n{'#' * int(x[1])} {_strip(x[2])}\n\n", md, flags=_I)
@@ -40,4 +47,4 @@ def html_to_markdown(html: str, base_url: str) -> dict:
     md = re.sub(r" *\n *", "\n", md)
     markdown = re.sub(r"\n{3,}", "\n\n", md).strip()
     links = list(dict.fromkeys(re.findall(r"\[[^\]]*\]\((https?:[^)\s]+)\)", markdown)))
-    return {"title": title, "markdown": markdown, "links": links}
+    return {"title": title, "description": description, "markdown": markdown, "links": links}

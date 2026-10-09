@@ -6,6 +6,8 @@ EMAIL = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
 class Credentials(BaseModel):
     email: str = Field(pattern=EMAIL, max_length=254)
     password: str = Field(min_length=8, max_length=128)
+    name: str | None = Field(None, max_length=120)
+    plan: str | None = None
 
 
 class Login(BaseModel):  # no length rules, so a bad password is a 401 and not a 422

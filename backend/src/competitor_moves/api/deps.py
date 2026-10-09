@@ -10,7 +10,11 @@ from ..services import sessions
 def current_user(authorization: str = Header(None), conn=Depends(get_conn)) -> dict:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(401, "Missing token")
-    token = authorization[7:]
+    return authenticate(conn, authorization[7:])
+
+
+def authenticate(conn, token: str) -> dict:
+    """The user behind a session token (bearer header or the UI's cookie). Raises HTTPException(401)."""
     try:
         claims = decode_token(token)
         uid = int(claims["sub"])

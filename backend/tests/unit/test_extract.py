@@ -121,3 +121,99 @@ def test_markdown_matches_ui_shape():
 def test_cheapest_offer_wins_even_when_listed_later():
     html = page('{"@type":"Product","name":"Hoops","offers":[{"price":"900","priceCurrency":"USD"},{"price":"750","priceCurrency":"USD"}]}')
     assert extract.extract_products(html, "https://s/h")[0]["price"] == Decimal(750)
+
+
+def test_uk_karat_plating_and_cubic_zirconia():
+    a = attributes.parse("Tennis Everyday Bracelet | 18ct Gold Plated/Cubic Zirconia")
+    assert (a["carat"], a["metal"], a["gem"]) == (None, "18k gold plated", "cubic zirconia")
+    assert attributes.parse("Tennis Everyday Bracelet | Platinum Plated/Cubic Zirconia")["metal"] == "platinum plated"
+    a = attributes.parse("9ct Yellow Gold 0.25ct Diamond Solitaire Ring")
+    assert (a["metal"], a["carat"], a["gem"]) == ("9k yellow gold", 0.25, "diamond")
+    assert attributes.parse("Molten Gold Vermeil Hoops")["metal"] == "gold vermeil"
+    assert attributes.parse("Silver-plated CZ studs")["metal"] == "silver plated"
+
+
+def test_company_profile_from_the_homepage():
+    html = ('<html><head><title>Lumen | Fine Jewellery</title><meta name="description" content="Lab-grown diamonds, made in London.">'
+            '</head><body><h1>Brilliance, responsibly made</h1><h2>Free resizing</h2><h3>Lifetime warranty</h3>'
+            '<a href="https://www.instagram.com/lumenjewels">ig</a><a href="https://x.com/lumen">x</a><a href="https://x.com/other">x2</a>'
+            '<a href="mailto:hello@lumen.example?subject=hi">mail</a><p>Write to care@lumen.example</p></body></html>')
+    p = extract.profile(html, "https://lumen.example/", [{"name": "Rings", "url": "https://lumen.example/c/rings"}])
+    assert p["headline"] == "Brilliance, responsibly made" and p["description"] == "Lab-grown diamonds, made in London."
+    assert p["positioning"] == ["Free resizing", "Lifetime warranty"]
+    assert p["socials"] == [{"network": "Instagram", "url": "https://www.instagram.com/lumenjewels"},
+                            {"network": "X", "url": "https://x.com/lumen"}]
+    assert p["emails"] == ["hello@lumen.example", "care@lumen.example"]
+    assert p["keyPages"] == [{"path": "/c/rings", "title": "Rings"}]
+    assert html_to_markdown(html, "https://lumen.example/")["description"] == "Lab-grown diamonds, made in London."
+
+
+MISSOMA_META = """<html><head><title>Molten Teardrop Pavé Charm Hoop Earrings | Missoma UK</title>
+<meta name="description" content="Discover the Molten Teardrop Pavé Charm Hoop Earrings in silver from Missoma.">
+<meta property="og:site_name" content="Missoma">
+<meta property="og:url" content="https://www.missoma.com/products/molten-teardrop-pave-charm-hoop-earrings-silver-plated-cubic-zirconia">
+<meta property="og:title" content="Molten Teardrop Pavé Charm Hoop Earrings | Missoma UK">
+<meta property="og:type" content="product">
+<meta property="og:description" content="Discover the Molten Teardrop Pavé Charm Hoop Earrings in silver from Missoma. Covered by a two-year warranty. Get 10% off your first order."><meta property="og:image" content="http://www.missoma.com/cdn/shop/files/a.webp?v=1790883216">
+  <meta property="og:image:secure_url" content="https://www.missoma.com/cdn/shop/files/a.webp?v=1790883216">
+  <meta property="og:image:width" content="2351">
+  <meta property="og:image:height" content="2953"><meta property="og:price:amount" content="89.00">
+  <meta property="og:price:currency" content="GBP"><meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Molten Teardrop Pavé Charm Hoop Earrings | Missoma UK">
+<meta name="twitter:description" content="Discover the Molten Teardrop Pavé Charm Hoop Earrings in silver from Missoma. Covered by a two-year warranty. Get 10% off your first order.">
+<meta name="viewport" content="width=device-width"></head><body></body></html>"""
+
+
+def test_page_meta_tags_are_kept_as_they_are():
+    t = extract.page_tags(MISSOMA_META)
+    assert t["meta_title"] == "Molten Teardrop Pavé Charm Hoop Earrings | Missoma UK"
+    assert t["meta_description"] == "Discover the Molten Teardrop Pavé Charm Hoop Earrings in silver from Missoma."
+    m = t["meta"]
+    assert m["og:site_name"] == "Missoma" and m["og:type"] == "product" and m["og:price:amount"] == "89.00"
+    assert m["og:price:currency"] == "GBP" and m["og:image:width"] == "2351" and m["twitter:card"] == "summary_large_image"
+    assert m["og:url"].endswith("silver-plated-cubic-zirconia") and m["og:image"].startswith("http://www.missoma.com/cdn/")
+    assert "viewport" not in m  # only SEO/social tags are kept
+    [p] = extract.extract_products(MISSOMA_META, "https://www.missoma.com/products/x")  # OpenGraph product
+    assert p["meta_title"] == t["meta_title"] and p["meta"]["og:title"] == m["og:title"] and p["meta_fetched_at"]
+
+
+FIX = __import__("pathlib").Path(__file__).resolve().parent.parent / "fixtures"
+
+
+def test_server_rendered_page_without_structured_data_is_read_from_its_html():
+    html = (FIX / "aura_product.html").read_text()
+    assert extract.products_from_jsonld(html, "u") == [] and extract.product_from_og(html, "u") is None
+    [p] = extract.extract_products(html, "https://techtitans.bytestechnolabs.com/aura_jewels/product/bangle-wristband-20-1928")
+    assert (p["title"], p["price"], p["currency"], p["sku"], p["extracted_by"]) == (
+        "Bangle Wristband 20", Decimal("2223.16"), "INR", "BRC-0020", "html")
+    assert not extract.needs_browser(html)
+
+
+def test_client_side_templates_are_never_stored_and_mark_the_page_for_a_browser():
+    html = (FIX / "indriya_template.html").read_text()
+    assert extract.extract_products(html, "https://www.indriya.com/jewellery-products/x") == []
+    assert extract.needs_browser(html)
+
+
+def test_html_fallback_refuses_ambiguous_pages():
+    assert extract.product_from_html("<html><body><h1>Our story</h1><p>Since 1990.</p></body></html>", "u") is None
+    assert extract.product_from_html("<html><body><h1>Rings</h1><p>Ring A ₹100</p><p>Ring B ₹200</p></body></html>", "u") is None
+    two = "<html><body><h1>Halo Ring</h1><p>₹1,500.00</p><s>₹1,800.00</s></body></html>"
+    p = extract.product_from_html(two, "u")
+    assert p["price"] == Decimal("1500.00") and p["compare_at_price"] is None  # never guess a sale from page text
+
+
+def test_category_comes_from_the_breadcrumb_when_the_product_has_none():
+    [p] = extract.extract_products((FIX / "aura_product.html").read_text(), "https://x/aura_jewels/product/bangle-wristband-20-1928")
+    assert p["category"] == "Bracelet"
+    ld = ('<script type="application/ld+json">{"@type":"Product","name":"Lakshmi Necklace","offers":{"price":"5"}}</script>'
+          '<script type="application/ld+json">{"@type":"BreadcrumbList","itemListElement":['
+          '{"position":1,"name":"Home"},{"position":2,"item":{"name":"Jewellery"}},{"position":3,"name":"Necklaces"},'
+          '{"position":4,"name":"Lakshmi Necklace"}]}</script>')
+    [p] = extract.extract_products(f"<html><head>{ld}</head></html>", "https://x/p")
+    assert p["category"] == "Necklaces"
+
+
+def test_a_menu_link_back_to_the_homepage_is_not_a_category():
+    html = ('<html><body><nav><a href="https://s.com/shop/">✨ Brand</a><a href="/shop/category/ring">Ring</a></nav></body></html>')
+    assert [n["name"] for n in extract.page_meta(html, "https://s.com/shop/")["nav"]] == ["Ring"]
