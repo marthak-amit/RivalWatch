@@ -10,8 +10,9 @@
   :root { --s1:#2a78d6; --s2:#eb6834; --side:#fff; --side-hover:#f1f3f9; --surface-1:var(--card); }
   @media (prefers-color-scheme: dark) { :root { --s1:#3987e5; --s2:#d95926; --side:#12141a; --side-hover:#1d2029; } }
 
-  .shell { display:grid; grid-template-columns:260px 1fr; min-height:100vh; }
-  .sidebar { background:var(--side); border-right:1px solid var(--line); position:sticky; top:0; height:100vh; height:100dvh; display:flex; flex-direction:column; padding:16px 12px; gap:14px; overflow:hidden; }
+  .shell { min-height:100vh; }
+  /* Pinned to the viewport edges (not sticky/100vh) so it can never move or be scrolled, whatever the browser toolbar does */
+  .sidebar { background:var(--side); border-right:1px solid var(--line); position:fixed; left:0; top:0; bottom:0; width:260px; z-index:20; display:flex; flex-direction:column; padding:16px 12px; gap:14px; overflow:hidden; overflow:clip; overscroll-behavior:none; }
   .sidebar .logo { padding:2px 8px; }
   .sidebar .qa { display:grid; gap:8px; padding:0 4px; }
   .sidebar .qa .btn { width:100%; justify-content:flex-start; }
@@ -38,15 +39,15 @@
   .av { width:34px; height:34px; border-radius:50%; background:var(--acc-soft); color:var(--acc); display:grid; place-items:center; font-weight:800; flex:none; }
   .iconbtn { border:0; background:none; color:var(--mute); cursor:pointer; padding:6px; border-radius:8px; display:grid; } .iconbtn:hover { background:var(--side-hover); color:var(--ink); }
 
-  .content { min-width:0; }
+  .content { min-width:0; margin-left:260px; }
   .topbar { display:flex; align-items:center; gap:12px; padding:18px 28px 6px; }
   .topbar h1 { font-size:24px; } .topbar .sub { color:var(--mute); font-size:14px; }
   #burger { display:none; }
   main { padding:12px 28px 60px; max-width:1180px; }
   .scrim { display:none; }
   @media (max-width:900px) {
-    .shell { grid-template-columns:1fr; }
-    .sidebar { position:fixed; z-index:40; left:0; top:0; width:272px; transform:translateX(-102%); visibility:hidden; transition:transform .2s, visibility .2s; }
+    .content { margin-left:0; }
+    .sidebar { z-index:40; width:272px; transform:translateX(-102%); visibility:hidden; transition:transform .2s, visibility .2s; }
     body.open .sidebar { transform:none; visibility:visible; box-shadow:0 0 40px rgba(0,0,0,.35); }
     body.open .scrim { display:block; position:fixed; inset:0; background:rgba(8,10,16,.5); z-index:30; }
     #burger { display:grid; } .topbar { padding:14px 16px 4px; } main { padding:10px 16px 50px; }
@@ -81,7 +82,7 @@
   .linkbtn { background:none; border:0; color:var(--acc); font:inherit; font-weight:600; cursor:pointer; padding:0; } .linkbtn:hover { text-decoration:underline; }
 
   @media print {
-    .sidebar, .topbar #burger, .noprint, .scrim, #toast { display:none !important; } .shell { display:block; } main { padding:0; max-width:none; }
+    .sidebar, .topbar #burger, .noprint, .scrim, #toast { display:none !important; } .content { margin-left:0; } main { padding:0; max-width:none; }
     body { background:#fff; color:#000; } .card { box-shadow:none; break-inside:avoid; }
   }
 </style>
