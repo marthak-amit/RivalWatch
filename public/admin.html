@@ -30,6 +30,11 @@
   <div class="grid g4" id="kpis" style="margin-bottom:14px"></div>
   <div class="card" style="margin-bottom:14px"><div class="h-sec">Active customers by plan</div><div class="dist" id="dist"></div><div class="lg" id="legend"></div></div>
 
+  <div class="card" id="approvals" style="margin-bottom:14px" hidden>
+    <div class="row between wrapx"><div class="h-sec" style="margin:0">Waiting for approval <span class="pill acc" id="apCount"></span></div><span class="small mute">Price changes your clients requested. Nothing changes in Magento until you apply.</span></div>
+    <div class="scroll" style="margin-top:10px"><table><thead><tr><th>Client</th><th>Product</th><th>Change</th><th>Requested</th><th></th></tr></thead><tbody id="apRows"></tbody></table></div>
+  </div>
+
   <div class="card" style="margin-bottom:14px">
     <div class="toolbar">
       <input id="q" type="search" placeholder="Search name or email" aria-label="Search users">
@@ -114,6 +119,27 @@ function resetPw(u) {
 
 // ---- a customer's own (Magento) store: the admin can connect and manage it for them -------------------------------
 const CRONS = [['0 2 * * *', 'Every day at 02:00 UTC'], ['0 */12 * * *', 'Every 12 hours'], ['0 */6 * * *', 'Every 6 hours'], ['0 * * * *', 'Every hour']];
+/** A client's price changes: the agency can set guardrails (and take over applying), request a change, and decide on waiting ones. */
+function priceSection(u) {
+  const box = el('div', { style: 'border-top:1px solid var(--line);padding-top:14px;display:grid;gap:12px' }, el('div', { class: 'h-sec', style: 'margin:0' }, 'Price changes'), el('span', { class: 'small mute' }, 'Loading…'));
+  const ctx = { request: `/api/admin/users/${u.id}/prices`, action: (id, a) => `/api/admin/prices/${id}/${a}`, onDone: () => { load(); refresh(); } };
+  async function load() {
+    try {
+      const [{ changes }, s] = await Promise.all([api(`/api/admin/prices?user_id=${u.id}`), api(`/api/admin/users/${u.id}/prices/settings`)]);
+      const mx = el('input', { type: 'number', min: 1, max: 1000, step: 'any', value: s.maxChangePct, 'aria-label': 'Largest single change in percent' }), mm = el('input', { type: 'number', min: 0, max: 99, step: 'any', value: s.minMarginPct, 'aria-label': 'Lowest margin in percent' });
+      const only = el('input', { type: 'checkbox', checked: !!s.adminOnly }), sku = el('input', { placeholder: 'SKU, e.g. SOLITAIRE-RING', 'aria-label': 'SKU to change' }), err = el('p', { class: 'err', role: 'alert' });
+      box.replaceChildren(el('div', { class: 'h-sec', style: 'margin:0' }, 'Price changes'),
+        el('div', { class: 'fgrid' }, el('div', {}, el('label', {}, 'Largest single change (%)'), mx), el('div', {}, el('label', {}, 'Lowest margin over cost (%)'), mm)),
+        el('label', { class: 'chk' }, only, 'Only the agency applies price changes for this client'),
+        el('div', { class: 'row' }, el('button', { class: 'btn sm', type: 'button', onclick: async () => { err.textContent = ''; try { await api(`/api/admin/users/${u.id}/prices/settings`, { method: 'PATCH', body: { maxChangePct: +mx.value, minMarginPct: +mm.value, adminOnly: only.checked } }); toast('Price guardrails saved'); load(); } catch (e) { err.textContent = e.message; } } }, 'Save guardrails')), err,
+        el('div', { class: 'row' }, sku, el('button', { class: 'btn sm primary', type: 'button', style: 'white-space:nowrap', onclick: () => { const v = sku.value.trim(); if (!v) { sku.focus(); return; } priceDialog(ctx, { sku: v, title: v }); } }, 'Change price…')),
+        changes.length ? el('div', {}, ...changes.slice(0, 5).map((c) => el('div', { class: 'kv', style: 'grid-template-columns:1fr auto' }, el('span', {}, el('b', {}, c.title || c.sku), ` ${cur(c.oldPrice, c.currency)} → ${cur(c.newPrice, c.currency)} `, priceStatus(c.status)), el('span', { class: 'row', style: 'gap:6px' },
+          c.status === 'pending' && [el('button', { class: 'btn sm primary', type: 'button', onclick: () => decide(c, 'apply').then(load) }, 'Apply'), el('button', { class: 'btn sm', type: 'button', onclick: () => decide(c, 'cancel').then(load) }, 'Cancel')],
+          c.status === 'applied' && el('button', { class: 'btn sm', type: 'button', onclick: async () => { if (!confirm('Revert this change in Magento?')) return; try { await api(`/api/admin/prices/${c.id}/revert`, { method: 'POST' }); toast('Reverted'); } catch (e) { toast(e.message); } load(); refresh(); } }, 'Revert'))))) : el('p', { class: 'small mute' }, 'No price changes for this client yet.'));
+    } catch (e) { box.replaceChildren(el('div', { class: 'h-sec', style: 'margin:0' }, 'Price changes'), el('p', { class: 'err' }, e.message)); }
+  }
+  load(); return box;
+}
 function openStore(u) {
   const base = `/api/admin/users/${u.id}/store`;
   const body = el('div', { class: 'mb' }, el('span', { class: 'mute' }, 'Loading…'));
@@ -157,7 +183,8 @@ function openStore(u) {
         el('button', { class: 'btn primary', type: 'button', disabled: !!s.syncing, onclick: () => act(() => api(base + '/sync', { method: 'POST' }), 'Sync started') }, 'Sync now'),
         el('button', { class: 'btn', type: 'button', onclick: () => paint(s, 'edit') }, 'Edit'),
         el('button', { class: 'btn', type: 'button', onclick: () => act(() => api(base, { method: 'PATCH', body: { enabled: s.enabled === false } }), s.enabled === false ? 'Sync resumed' : 'Sync paused') }, s.enabled === false ? 'Resume' : 'Pause'),
-        el('span', { style: 'flex:1' }), el('button', { class: 'btn danger', type: 'button', onclick: () => confirm(`Disconnect ${u.email}'s store? Its synced data is deleted.`) && act(() => api(base, { method: 'DELETE' }), 'Store disconnected') }, 'Disconnect'))].filter(Boolean));
+        el('span', { style: 'flex:1' }), el('button', { class: 'btn danger', type: 'button', onclick: () => confirm(`Disconnect ${u.email}'s store? Its synced data is deleted.`) && act(() => api(base, { method: 'DELETE' }), 'Store disconnected') }, 'Disconnect')),
+      priceSection(u)].filter(Boolean));
   }
   load();
 }
@@ -168,7 +195,24 @@ async function loadAudit() {
     el('b', {}, a.actor), ' ', a.action.replace('_', ' '), a.target && a.target !== a.actor ? [' → ', el('b', {}, a.target)] : '', a.detail && el('span', { class: 'mute' }, ' ' + a.detail), el('span', { class: 'mute' }, ' · ' + ago(a.ts))))
     : [el('li', { class: 'mute small' }, 'No admin actions yet.')]));
 }
-const refresh = () => Promise.all([loadStats(), loadUsers(), loadAudit()]);
+// ---- price changes waiting for the agency ---------------------------------------------------------------------
+async function loadApprovals() {
+  if (!feat('adminStore')) return;
+  let changes = []; try { changes = (await api('/api/admin/prices?status=pending')).changes; } catch { return; }
+  $('approvals').hidden = !changes.length; $('apCount').textContent = changes.length;
+  $('apRows').replaceChildren(...changes.map((c) => el('tr', {},
+    el('td', {}, c.client || '–'), el('td', {}, el('b', {}, c.title || c.sku), el('div', { class: 'small mute' }, 'SKU ' + c.sku)),
+    el('td', {}, `${cur(c.oldPrice, c.currency)} → `, el('b', {}, cur(c.newPrice, c.currency)), el('div', { class: 'small mute' }, `${c.changePct > 0 ? '+' : ''}${c.changePct}%`)),
+    el('td', { class: 'small mute' }, `${c.requestedBy || ''} · ${ago(c.createdAt)}`),
+    el('td', {}, el('div', { class: 'row', style: 'gap:6px' },
+      el('button', { class: 'btn sm primary', onclick: () => decide(c, 'apply') }, 'Apply'), el('button', { class: 'btn sm', onclick: () => decide(c, 'cancel') }, 'Cancel'))))));
+}
+async function decide(c, action) {
+  if (action === 'apply' && !confirm(`Write ${cur(c.newPrice, c.currency)} as the regular price of ${c.title || c.sku} in ${c.client}'s Magento?`)) return;
+  try { await api(`/api/admin/prices/${c.id}/${action}`, { method: 'POST' }); toast(action === 'apply' ? 'Price changed in Magento' : 'Change cancelled'); } catch (e) { toast(e.message); }
+  refresh();
+}
+const refresh = () => Promise.all([loadStats(), loadUsers(), loadAudit(), loadApprovals()]);
 
 // add-user dialog
 $('add').onclick = () => { $('uform').reset(); $('uerr').textContent = ''; $('dlg').showModal(); };

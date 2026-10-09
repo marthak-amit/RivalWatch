@@ -12,6 +12,7 @@
   :root[data-theme=dark] { --s1:#3987e5; --s2:#d95926; --side:#12141a; --side-hover:#1d2029; }
   @media (prefers-color-scheme: dark) { :root:not([data-theme=light]) { --s1:#3987e5; --s2:#d95926; --side:#12141a; --side-hover:#1d2029; } }
 
+  .ladder { position:relative; height:8px; border-radius:8px; background:var(--line); margin:10px 6px; } .ladder i { position:absolute; top:50%; width:12px; height:12px; margin:-6px 0 0 -6px; border-radius:50%; background:var(--s2); box-shadow:0 0 0 2px var(--card); } .ladder i.us { background:var(--acc); width:16px; height:16px; margin:-8px 0 0 -8px; z-index:1; }
   .fgrid3 { display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); gap:12px; }
   .shell { min-height:100vh; }
   /* Pinned to the viewport edges (not sticky/100vh) so it can never move or be scrolled, whatever the browser toolbar does */
@@ -165,6 +166,8 @@ const ICONS = {
   sparkle: 'M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z',
   products: 'M21 8l-9-5-9 5v8l9 5 9-5z M3 8l9 5 9-5 M12 13v8',
   store: 'M3 9l1.5-5h15L21 9 M3 9v11h18V9 M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0 M9 20v-6h6v6',
+  comparison: 'M12 3v18 M6 7h12 M6 7l-3 7a3.5 3.5 0 0 0 6 0z M18 7l-3 7a3.5 3.5 0 0 0 6 0z M8 21h8',
+  prices: 'M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z M7.5 7.5h.01',
   settings: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
 };
 const NS = 'http://www.w3.org/2000/svg';
@@ -184,8 +187,8 @@ function normalise(c) {
 }
 /** Products collected for a competitor. `snapshot.products` only holds the most recent few, `productCount` is the full number. */
 const prodCount = (snap) => (snap ? snap.productCount ?? Object.keys(snap.products).length : 0);
-const NAV = [['Monitor', [['overview', 'Overview'], ['competitors', 'Competitors'], ['products', 'Products'], ['changes', 'Changes']]], ['Insights', [['reports', 'Reports'], ['digests', 'AI digests']]], ['Tools', [['store', 'Our store'], ['demo', 'Live demo'], ['account', 'Account & API']]]];
-const TITLES = { overview: 'Overview', competitors: 'Competitors', products: 'Products', store: 'Our store', changes: 'Changes', reports: 'Reports', digests: 'AI digests', demo: 'Live demo', account: 'Account & API' };
+const NAV = [['Monitor', [['overview', 'Overview'], ['competitors', 'Competitors'], ['products', 'Products'], ['comparison', 'Comparison'], ['changes', 'Changes']]], ['Insights', [['reports', 'Reports'], ['digests', 'AI digests']]], ['Tools', [['store', 'Our store'], ['prices', 'Price changes'], ['demo', 'Live demo'], ['account', 'Account & API']]]];
+const TITLES = { overview: 'Overview', competitors: 'Competitors', products: 'Products', comparison: 'Comparison', prices: 'Price changes', store: 'Our store', changes: 'Changes', reports: 'Reports', digests: 'AI digests', demo: 'Live demo', account: 'Account & API' };
 let S = null, ME = null, R = { week: null, month: null }, PLANS = {}, sig = '';
 let CAPS = {}; // what the backend supports (everything, in standalone mode)
 const can = (k) => CAPS[k] !== false;
@@ -193,10 +196,12 @@ const can = (k) => CAPS[k] !== false;
 // and the older adapter don't send these flags, so they stay hidden there; a native backend leaves them unset = available.
 const feat = (k) => CAPS.enabled === true && CAPS[k] !== false;
 let STORE_OK = false; // set once GET /api/store answers (older backends don't have it)
-const allowed = (t) => !((t === 'demo' && !can('demo')) || (t === 'products' && !feat('products')) || (t === 'store' && !(feat('store') && STORE_OK)));
+const storeOn = () => feat('store') && STORE_OK;
+const allowed = (t) => !((t === 'demo' && !can('demo')) || (t === 'products' && !feat('products')) || ((t === 'store' || t === 'comparison' || t === 'prices') && !storeOn()));
 let tab = (location.hash || '#overview').slice(1); if (!TITLES[tab]) tab = 'overview';
 let selComp = ''; try { selComp = sessionStorage.getItem('rw_comp') || ''; } catch { /* storage may be blocked */ }
 let period = 'week', showTable = false, summary = null, summarizing = false, flt = { type: '', comp: '' }, selSite = '', editMsg = 'Pick an edit, then crawl.';
+const SRC = { claude: 'Claude', gemini: 'Gemini', 'gemini+rules': 'Gemini + rules', rules: 'rule-based' }; const srcName = (s) => SRC[s] || 'rule-based';
 const TYPE_LABEL = { on_sale: 'on sale', out_of_stock: 'out of stock', back_in_stock: 'back in stock', product_updated: 'product updated', new_category: 'new category', page_changed: 'page changed', price_change: 'price change', product_added: 'product added', product_removed: 'product removed', new_promo: 'new promo', promo_ended: 'promo ended', new_page: 'new page', page_removed: 'page removed' };
 const SERIES = [['product', 'Product & price', 's1', 'var(--s1)'], ['page', 'Pages & promotions', 's2', 'var(--s2)']];
 const fmtDay = (d, o) => new Date(d + 'T00:00:00Z').toLocaleDateString('en', { timeZone: 'UTC', ...o });
@@ -286,7 +291,7 @@ const priceRange = (snap) => {
 const sumKey = (p) => p + '|' + selComp;
 function summaryCard(p, who) {
   const mine = summary && summary.key === sumKey(p);
-  return el('div', { class: 'card' }, el('div', { class: 'row between wrapx' }, el('div', { class: 'h-sec', style: 'margin:0' }, `AI summary · ${who} · ${p === 'week' ? 'this week' : 'this month'}${mine ? ' · ' + ({ claude: 'Claude', gemini: 'Gemini' }[summary.source] || 'rule-based') : ''}`),
+  return el('div', { class: 'card' }, el('div', { class: 'row between wrapx' }, el('div', { class: 'h-sec', style: 'margin:0' }, `AI summary · ${who} · ${p === 'week' ? 'this week' : 'this month'}${mine ? ' · ' + srcName(summary.source) : ''}`),
     btnI('sparkle', summarizing ? 'Summarising…' : mine ? 'Regenerate' : 'Generate', { class: 'btn sm', disabled: summarizing, onclick: () => genSummary(p) })),
     mine ? el('div', { style: 'margin-top:8px' }, digestBody(summary)) : el('p', { class: 'mute', style: 'margin-top:6px' }, `Get a short summary and suggested actions for ${who}.`));
 }
@@ -296,11 +301,11 @@ const kpi = (v, l, d, extra) => el('div', { class: 'card kpi' }, el('div', { cla
 const delta = (r) => r.deltaPct == null ? (r.total ? 'no earlier data to compare' : '') : `${r.deltaPct > 0 ? '▲' : r.deltaPct < 0 ? '▼' : '■'} ${Math.abs(r.deltaPct)}% vs previous ${r.days} days`;
 function digestBody(d) {
   return [el('p', { style: 'margin-bottom:8px' }, d.summary), el('ol', { class: 'actions' }, d.actions.map((a) => el('li', {}, el('b', {}, a.title + ' '),
-    el('span', { class: { high: 'hi', medium: 'md', low: 'lo' }[a.priority] || 'lo' }, '(' + a.priority + ')'), el('div', { class: 'small mute' }, a.why))))];
+    el('span', { class: { high: 'hi', medium: 'md', low: 'lo' }[a.priority] || 'lo' }, '(' + a.priority + ')'), a.evidence?.length > 0 && el('span', { class: 'pill', style: 'margin-left:6px', title: 'Backed by: ' + a.evidence.join(', ') }, `${a.evidence.length} evidence`), el('div', { class: 'small mute' }, a.why))))];
 }
 function digestCard() {
   const d = S.digest;
-  return el('div', { class: 'card' }, el('div', { class: 'h-sec' }, 'Latest AI digest ', el('span', { style: 'text-transform:none;letter-spacing:0' }, d ? '· ' + (d.source === 'claude' ? 'Claude' : 'rule-based') : '')),
+  return el('div', { class: 'card' }, el('div', { class: 'h-sec' }, 'Latest AI digest ', el('span', { style: 'text-transform:none;letter-spacing:0' }, d ? '· ' + srcName(d.source) : '')),
     d ? digestBody(d) : el('p', { class: 'mute' }, can('demo') ? 'No digest yet. Open Live demo, edit a competitor page, then crawl.' : 'No digest yet. One is written after a crawl that detects changes.'));
 }
 const changeItem = (c) => el('li', {}, el('span', { class: 'tag ' + c.type }, TYPE_LABEL[c.type] || c.type), el('b', {}, c.competitor + ': '), c.label,
@@ -522,7 +527,7 @@ function reports() {
 }
 
 function digests() {
-  return S.digests.length ? S.digests.map((d) => el('div', { class: 'card', style: 'margin-bottom:14px' }, el('div', { class: 'h-sec' }, `${fmtTime(d.ts)} · ${d.changeCount} change${d.changeCount === 1 ? '' : 's'} · ${d.source === 'claude' ? 'Claude' : 'rule-based'}`), digestBody(d)))
+  return S.digests.length ? S.digests.map((d) => el('div', { class: 'card', style: 'margin-bottom:14px' }, el('div', { class: 'h-sec' }, `${fmtTime(d.ts)} · ${d.changeCount} change${d.changeCount === 1 ? '' : 's'} · ${srcName(d.source)}`), digestBody(d)))
     : el('div', { class: 'card mute' }, 'No digests yet. A digest is written after every crawl that detects changes.');
 }
 
@@ -618,16 +623,17 @@ function paintProducts() {
     if (!products.length) bits.push(el('p', { class: 'mute', style: 'margin-top:10px' }, S.competitors.length ? (Object.entries(PF).some(([k, v]) => k !== 'sort' && k !== 'offset' && v) ? 'No products match these filters.' : 'No products collected yet. They appear while the first crawl runs.') : 'Add a competitor to start collecting products.'));
     else {
       bits.push(el('div', { class: 'scroll', style: 'margin-top:8px' }, el('table', { class: 't' },
-        el('thead', {}, el('tr', {}, ['Product', 'Competitor', 'Price', 'Stock', 'Details', 'First seen'].map((h, i) => el('th', { class: i === 2 ? 'n' : '' }, h)))),
+        el('thead', {}, el('tr', {}, [...(PF.competitor === 'ours' ? ['Product', 'SKU'] : ['Product', 'Competitor']), 'Price', 'Stock', 'Details', 'First seen', ...(PF.competitor === 'ours' ? [''] : [])].map((h, i) => el('th', { class: i === 2 ? 'n' : '' }, h)))),
         el('tbody', {}, products.map((p) => {
           const href = safeHref(p.url), attrs = Object.entries(p.attributes || {}).filter(([, v]) => v != null && v !== '');
           return el('tr', {},
             el('td', { style: 'max-width:320px' }, href ? el('a', { href, target: '_blank', rel: 'noopener noreferrer' }, p.title) : p.title, p.category && el('div', { class: 'small mute' }, p.category)),
-            el('td', {}, p.competitor || names.get(p.competitorId) || ''),
+            PF.competitor === 'ours' ? el('td', { class: 'small', style: 'font-family:ui-monospace,monospace' }, p.sku || '–') : el('td', {}, p.competitor || names.get(p.competitorId) || ''),
             el('td', { class: 'n' }, el('b', {}, p.priceLabel || '–'), p.wasPrice && el('div', { class: 'small mute' }, el('s', {}, p.wasPrice), p.discountPct != null && el('span', { class: 'tag on_sale', style: 'margin-left:6px' }, `-${p.discountPct}%`))),
             el('td', {}, p.inStock === true ? el('span', { class: 'pill good' }, 'In stock') : p.inStock === false ? el('span', { class: 'pill bad' }, 'Out of stock') : el('span', { class: 'mute' }, '–')),
             el('td', {}, el('div', { class: 'row wrapx', style: 'gap:4px' }, attrs.map(([k, v]) => el('span', { class: 'pill', title: k }, String(v))))),
-            el('td', { class: 'small mute' }, p.firstSeen ? ago(p.firstSeen) : ''));
+            el('td', { class: 'small mute' }, p.firstSeen ? ago(p.firstSeen) : ''),
+            PF.competitor === 'ours' && el('td', {}, p.sku ? el('button', { class: 'btn sm', onclick: () => changePrice(p) }, 'Change price') : null));
         })))));
       if (total > limit) bits.push(el('div', { class: 'row', style: 'margin-top:12px;justify-content:flex-end' },
         el('button', { class: 'btn sm', disabled: offset === 0 || PBUSY, onclick: () => { PF.offset = Math.max(0, offset - limit); loadProducts(); } }, '← Previous'),
@@ -683,14 +689,129 @@ function storeStatus(s) {
       row('Schedule', (CRONS.find(([v]) => v === s.cron) || [, s.cron || '–'])[1]), row('Access token', s.hasToken ? 'Stored (encrypted)' : 'None (public catalogue)')),
     el('div', { class: 'row wrapx', style: 'margin-top:14px' },
       btnI('crawl', s.syncing ? 'Syncing…' : 'Sync now', { class: 'btn primary', disabled: !!s.syncing, onclick: async () => { try { await api('/api/store/sync', { method: 'POST' }); toast('Sync started'); await loadStore(); } catch (e) { toast(e.message); } } }),
+      btnI('comparison', 'Compare with competitors', { onclick: () => { CD = null; go('comparison'); } }), btnI('prices', 'Price changes', { onclick: () => { PL = null; go('prices'); } }),
       btnI('products', 'View our products', { onclick: () => { PF = { ...PF0, competitor: 'ours' }; PD = null; go('products'); } }),
       btnI('settings', 'Edit connection', { onclick: () => { STOREFORM = true; paintView(); } }),
       el('button', { class: 'btn', onclick: async () => { try { STORE = (await api('/api/store', { method: 'PATCH', body: { enabled: s.enabled === false } })).store; toast(STORE.enabled === false ? 'Sync paused' : 'Sync resumed'); paintView(); } catch (e) { toast(e.message); } } }, s.enabled === false ? 'Resume sync' : 'Pause sync'), el('span', { style: 'flex:1' }),
       el('button', { class: 'btn danger', onclick: async () => { if (!confirm('Disconnect your store? Its synced products and history are deleted.')) return; try { await api('/api/store', { method: 'DELETE' }); STORE = null; toast('Store disconnected'); await refresh(true); } catch (e) { toast(e.message); } } }, 'Disconnect')))];
 }
 
-const VIEWS = { overview, competitors, products, store, changes, reports, digests, demo, account };
-const SUBS = { overview: () => (curComp() ? curComp().name + ' · ' : '') + (S.lastRun ? 'Last crawl ' + ago(S.lastRun) : 'Baseline crawl running…'), competitors: () => `${S.competitors.length} competitor${S.competitors.length === 1 ? '' : 's'} tracked`, products: () => (PD ? `${PD.total.toLocaleString()} product${PD.total === 1 ? '' : 's'} match` : 'Collected from your competitors'), store: () => 'Your own catalogue, compared with your rivals', changes: () => `${S.changes.length} detected in total`, reports: () => 'Weekly and monthly competitor activity', digests: () => 'AI-written summaries and actions', demo: () => 'Edit a test page, then crawl', account: () => 'Plan, billing and API access' };
+// ---------- price changes in Magento (shared dialog lives in common.js) ----------
+const PCTX = { request: '/api/prices', action: (id, a) => `/api/prices/${id}/${a}`, onDone: () => { PD = null; PL = null; CD = null; refresh(true); } };
+const changePrice = (p) => priceDialog(PCTX, { sku: p.sku, title: p.title, currency: p.currency, price: p.price });
+/** The comparison only knows titles for shared products: find our product (and its real SKU) in our catalogue. */
+async function changePriceByTitle(title, our) {
+  try { const r = await api('/api/products?competitor=ours&limit=20&q=' + encodeURIComponent(title)); const p = r.products.find((x) => x.title === title) || r.products[0];
+    if (!p?.sku) return toast('Couldn’t find this product in your store catalogue'); changePrice(p); } catch (e) { toast(e.message); }
+}
+
+// ---------- comparison: our prices against competitors (M6) ----------
+const GROUPS = [['type', 'Jewellery type'], ['type,metal', 'Type + metal'], ['type,stone', 'Type + stone'], ['type,metal,stone', 'Type + metal + stone'], ['type,carat', 'Type + carat band']];
+let CG = 'type', CC = '', CD = null, CERR = '', CBUSY = false, CSETS = false, CTOK = 0;
+async function loadComparison(quiet) {
+  const tok = ++CTOK; if (!quiet) { CBUSY = true; CERR = ''; }
+  const q = new URLSearchParams({ group_by: CG }); if (CC) q.set('competitor', CC);
+  try { const d = await api('/api/comparison?' + q); if (tok !== CTOK) return; CD = d; CERR = ''; } catch (e) { if (tok !== CTOK) return; CERR = e.message; }
+  CBUSY = false; if (tab === 'comparison') paintView();
+}
+function ladder(row, ourCur) {
+  const pts = [{ n: 'Us', v: row.ours.median, us: true }, ...row.competitors.map((c) => ({ n: c.name, v: c.currency === ourCur ? c.median : c.medianInOurCurrency, c })).filter((x) => x.v != null)];
+  const max = Math.max(...pts.map((x) => x.v)) * 1.06 || 1;
+  return el('div', { class: 'ladder', role: 'img', 'aria-label': 'Median prices on one scale: ' + pts.map((x) => `${x.n} ${cur(x.v, ourCur)}`).join(', ') },
+    pts.map((x) => el('i', { class: x.us ? 'us' : '', style: `left:${(x.v / max) * 100}%`, title: `${x.n}: median ${cur(x.v, ourCur)}` })));
+}
+function comparisonSettings(d) {
+  const s = d.settings || {}, ourCur = d.ours?.currency, rates = { ...(s.fx_rates || {}) };
+  const codes = new Set(Object.keys(rates)); [...d.rows.flatMap((r) => r.competitors), ...d.onlyCompetitors.flatMap((r) => r.competitors)].forEach((c) => c.currency && c.currency !== ourCur && codes.add(c.currency)); d.matches.forEach((m) => m.theirs?.currency && m.theirs.currency !== ourCur && codes.add(m.theirs.currency));
+  const minP = el('input', { type: 'number', min: 0, step: 'any', value: s.min_price ?? '', 'aria-label': 'Minimum price' }), grp = el('input', { type: 'number', min: 1, max: 50, step: 1, value: s.min_group_size ?? '', 'aria-label': 'Minimum group size' });
+  const fx = [...codes].sort().map((code) => [code, el('input', { type: 'number', min: 0, step: 'any', value: rates[code] ?? '', placeholder: 'rate', 'aria-label': `1 ${code} in ${ourCur}` })]);
+  const err = el('p', { class: 'err', role: 'alert' });
+  return el('form', { class: 'card', id: 'cmpSettings', style: 'margin-bottom:14px', novalidate: true, onsubmit: async (e) => {
+    e.preventDefault(); err.textContent = '';
+    const fxRates = Object.fromEntries(fx.filter(([, i]) => +i.value > 0).map(([c, i]) => [c, +i.value]));
+    try { await api('/api/comparison/settings', { method: 'PATCH', body: { minPrice: minP.value === '' ? undefined : +minP.value, minGroupSize: grp.value === '' ? undefined : +grp.value, fxRates } }); CSETS = false; toast('Comparison settings saved'); await loadComparison(); }
+    catch (x) { err.textContent = x.message; } } },
+    el('div', { class: 'h-sec' }, 'Comparison settings'),
+    el('div', { class: 'fgrid' }, el('div', {}, el('label', {}, `Ignore products cheaper than${ourCur ? ' (' + ourCur + ')' : ''}`), minP, el('div', { class: 'fhint' }, 'Skips test items such as a $1 staging product.')),
+      el('div', {}, el('label', {}, 'Products needed per group, on each side'), grp, el('div', { class: 'fhint' }, 'Smaller groups are not compared.'))),
+    fx.length ? el('div', { style: 'margin-top:12px' }, el('label', {}, `Currency rates into ${ourCur || 'your currency'}`), el('div', { class: 'fgrid3' }, fx.map(([code, i]) => el('div', { class: 'row', style: 'gap:6px' }, el('span', { class: 'small', style: 'white-space:nowrap' }, `1 ${code} =`), i, el('span', { class: 'small mute' }, ourCur))), el('div', { class: 'fhint' }, 'Without a rate, prices in another currency are shown but never compared. Nothing is guessed.'))) : null,
+    err, el('div', { class: 'row', style: 'margin-top:12px' }, el('button', { class: 'btn primary', type: 'submit' }, 'Save'), el('button', { class: 'btn', type: 'button', onclick: () => { CSETS = false; paintView(); } }, 'Cancel')));
+}
+function comparison() {
+  if (!CD && !CBUSY && !CERR) loadComparison();
+  const d = CD;
+  const controls = el('div', { class: 'controls' },
+    el('select', { 'aria-label': 'Group products by', class: 'inline', onchange: (e) => { CG = e.target.value; loadComparison(); } }, GROUPS.map(([v, t]) => el('option', { value: v, selected: v === CG }, t))),
+    el('select', { 'aria-label': 'Competitor', class: 'inline', onchange: (e) => { CC = e.target.value; loadComparison(); } }, el('option', { value: '' }, 'All competitors'), S.competitors.map((c) => el('option', { value: c.id, selected: c.id === CC }, c.name))),
+    CBUSY && el('span', { class: 'small mute' }, 'Updating…'), el('span', { style: 'flex:1' }), d?.ours && btnI('settings', 'Settings', { class: 'btn sm', onclick: () => { CSETS = !CSETS; paintView(); } }));
+  if (!d) return [controls, el('div', { class: 'card' }, CERR ? el('p', { class: 'err' }, CERR) : el('p', { class: 'mute' }, 'Loading the comparison…'))];
+  if (!d.ours) return [el('div', { class: 'card' }, el('div', { class: 'h-sec' }, 'Connect your store to compare prices'), el('p', { class: 'mute' }, (d.notes || []).join(' ') || 'Your own catalogue is needed to compare prices with your competitors.'), el('p', { style: 'margin-top:12px' }, el('button', { class: 'btn primary', onclick: () => go('store') }, 'Connect your store')))];
+  const cmp = d.rows.filter((r) => r.competitors.some((c) => c.comparable)), cheapest = d.rows.filter((r) => r.cheapest === 'ours').length;
+  const gapCell = (c) => c.comparable ? el('span', { class: gapClass(c.gapPct), title: 'Median price of this group, compared with ours' }, gapText(c.gapPct)) : el('span', { class: 'mute', title: `No ${d.ours.currency} rate for ${c.currency}` }, `${c.currency}: no rate`);
+  return [controls, CSETS && comparisonSettings(d),
+    el('div', { class: 'grid g4', style: 'margin-bottom:14px' }, kpi(cmp.length, 'Groups compared', `of ${d.rows.length} shared types`), kpi(cheapest, 'We are cheapest in', cmp.length ? `${Math.round(cheapest / Math.max(1, d.rows.length) * 100)}% of groups` : ''),
+      kpi(d.matches.length, 'Same products', 'matched by SKU'), kpi(d.onlyCompetitors.length, 'They sell, we don’t', 'types we have none of')),
+    ...(d.notes || []).map((n) => el('p', { class: 'card small', style: 'margin-bottom:10px;border-left:3px solid var(--warn)' }, n)),
+    el('div', { class: 'card', style: 'margin-bottom:14px' }, el('div', { class: 'h-sec' }, `Price positioning · ${GROUPS.find((g) => g[0] === d.groupBy)?.[1] || d.groupBy}`),
+      d.rows.length ? el('div', { class: 'scroll' }, el('table', { class: 't' }, el('thead', {}, el('tr', {}, ['Group', 'Us (median)', 'Competitors', 'Scale', 'Cheapest'].map((h, i) => el('th', { class: i === 1 ? 'n' : '' }, h)))),
+        el('tbody', {}, d.rows.map((r) => el('tr', {}, el('td', {}, el('b', {}, r.label)),
+          el('td', { class: 'n' }, el('b', {}, cur(r.ours.median, r.ours.currency)), el('div', { class: 'small mute' }, `${r.ours.count} product${r.ours.count === 1 ? '' : 's'} · ${cur(r.ours.min, r.ours.currency)}–${cur(r.ours.max, r.ours.currency)}`)),
+          el('td', {}, r.competitors.map((c) => el('div', { style: 'margin-bottom:4px' }, el('b', {}, c.name), ` ${cur(c.median, c.currency)} `, el('span', { class: 'small mute' }, `(${c.count})`), ' ', gapCell(c)))),
+          el('td', { style: 'min-width:140px' }, ladder(r, d.ours.currency)),
+          el('td', {}, r.cheapest === 'ours' ? el('span', { class: 'pill good' }, 'Us') : el('span', { class: 'pill bad' }, S.competitors.find((c) => c.id === r.cheapest)?.name || 'Competitor')))))))
+        : el('p', { class: 'mute' }, `No shared product types with at least ${d.settings.min_group_size} products on each side yet. Lower the group size in Settings, or crawl more of your competitors.`)),
+    el('div', { class: 'grid g2' },
+      el('div', { class: 'card' }, el('div', { class: 'h-sec' }, 'They sell, we don’t'),
+        d.onlyCompetitors.length ? el('ul', { class: 'plain' }, d.onlyCompetitors.map((r) => el('li', {}, el('b', {}, r.label), r.competitors.map((c) => el('div', { class: 'small mute' }, `${c.name}: ${c.count} product${c.count === 1 ? '' : 's'}, median ${cur(c.median, c.currency)}`))))) : el('p', { class: 'mute' }, 'No gaps: you sell every type your competitors do.')),
+      el('div', { class: 'card' }, el('div', { class: 'h-sec' }, 'Same products'),
+        d.matches.length ? el('div', { class: 'scroll' }, el('table', { class: 't' }, el('thead', {}, el('tr', {}, ['Product', 'Us', 'Them', 'Gap', ''].map((h, i) => el('th', { class: i === 1 || i === 2 ? 'n' : '' }, h)))),
+          el('tbody', {}, d.matches.map((m) => el('tr', {}, el('td', {}, el('a', { href: safeHref(m.ours.url) || '#', target: '_blank', rel: 'noopener noreferrer' }, m.title)),
+            el('td', { class: 'n' }, cur(m.ours.price, m.ours.currency)), el('td', { class: 'n' }, el('div', {}, cur(m.theirs.price, m.theirs.currency)), el('div', { class: 'small mute' }, m.competitor)),
+            el('td', {}, m.gapPct == null ? el('span', { class: 'mute small' }, 'no rate') : el('span', { class: gapClass(m.gapPct) }, gapText(m.gapPct))),
+            el('td', {}, el('button', { class: 'btn sm', onclick: () => changePriceByTitle(m.title, m.ours) }, 'Change price'))))))) : el('p', { class: 'mute' }, 'No product is sold by both you and a competitor under the same SKU yet.'))),
+  ];
+}
+
+// ---------- price changes: requests, approvals, history, guardrails (M7) ----------
+let PL = null, PLSTATUS = '', PLERR = '';
+async function loadPrices() {
+  try { PL = await api('/api/prices' + (PLSTATUS ? '?status=' + PLSTATUS : '')); PLERR = ''; } catch (e) { PLERR = e.message; PL = PL || { changes: [], settings: {} }; }
+  if (tab === 'prices') paintView();
+}
+async function priceAction(c, a) {
+  if (a === 'apply' && !confirm(`Write ${cur(c.newPrice, c.currency)} as the regular price of ${c.title || c.sku} in Magento?`)) return;
+  if (a === 'revert' && !confirm(`Put ${cur(c.oldPrice, c.currency)} back as the regular price of ${c.title || c.sku}?`)) return;
+  try { await api(`/api/prices/${c.id}/${a}`, { method: 'POST' }); toast({ apply: 'Price changed in Magento', cancel: 'Change cancelled', revert: 'Revert requested' }[a]); } catch (e) { toast(e.message); }
+  PL = null; PD = null; CD = null; await refresh(true); loadPrices();
+}
+function guardrails(s) {
+  const lock = s.adminOnly, mx = el('input', { type: 'number', min: 1, max: 1000, step: 'any', value: s.maxChangePct ?? '', disabled: lock, 'aria-label': 'Largest allowed price change in percent' }), mm = el('input', { type: 'number', min: 0, max: 99, step: 'any', value: s.minMarginPct ?? '', disabled: lock, 'aria-label': 'Lowest allowed margin in percent' });
+  const err = el('p', { class: 'err', role: 'alert' });
+  return el('form', { class: 'card', id: 'pguard', style: 'margin-bottom:14px', novalidate: true, onsubmit: async (e) => { e.preventDefault(); err.textContent = '';
+    try { await api('/api/prices/settings', { method: 'PATCH', body: { maxChangePct: +mx.value, minMarginPct: +mm.value } }); toast('Guardrails saved'); loadPrices(); } catch (x) { err.textContent = x.message; } } },
+    el('div', { class: 'row between wrapx' }, el('div', { class: 'h-sec', style: 'margin:0' }, 'Guardrails'), lock && el('span', { class: 'pill acc' }, 'Your agency approves price changes')),
+    el('div', { class: 'fgrid', style: 'margin-top:10px' }, el('div', {}, el('label', {}, 'Largest single change (%)'), mx, el('div', { class: 'fhint' }, 'Catches typos such as an extra zero.')), el('div', {}, el('label', {}, 'Lowest margin over cost (%)'), mm, el('div', { class: 'fhint' }, 'Checked when Magento has a cost for the product. 0 = never below cost.'))),
+    err, !lock && el('div', { style: 'margin-top:12px' }, el('button', { class: 'btn primary', type: 'submit' }, 'Save guardrails')));
+}
+function prices() {
+  if (!PL) { loadPrices(); return el('div', { class: 'card mute' }, 'Loading…'); }
+  const rows = PL.changes;
+  return [PLERR && el('p', { class: 'err' }, PLERR), guardrails(PL.settings || {}),
+    el('div', { class: 'controls' }, el('select', { 'aria-label': 'Status', class: 'inline', onchange: (e) => { PLSTATUS = e.target.value; PL = null; paintView(); } }, [['', 'All changes'], ['pending', 'Waiting to be applied'], ['applied', 'Applied'], ['failed', 'Failed'], ['cancelled', 'Cancelled']].map(([v, t]) => el('option', { value: v, selected: v === PLSTATUS }, t))),
+      el('span', { class: 'small mute' }, `${rows.length} change${rows.length === 1 ? '' : 's'}`), el('span', { style: 'flex:1' }), btnI('products', 'Our products', { class: 'btn sm', onclick: () => { PF = { ...PF0, competitor: 'ours' }; PD = null; go('products'); } })),
+    el('div', { class: 'card' }, rows.length ? el('div', { class: 'scroll' }, el('table', { class: 't' }, el('thead', {}, el('tr', {}, ['Product', 'Change', 'Status', 'Who', 'When', ''].map((h, i) => el('th', { class: i === 1 ? 'n' : '' }, h)))),
+      el('tbody', {}, rows.map((c) => el('tr', {}, el('td', {}, el('b', {}, c.title || c.sku), el('div', { class: 'small mute' }, 'SKU ' + c.sku + (c.reverts ? ` · reverts #${c.reverts}` : ''))),
+        el('td', { class: 'n' }, `${cur(c.oldPrice, c.currency)} → `, el('b', {}, cur(c.newPrice, c.currency)), el('div', { class: 'small mute' }, `${c.changePct > 0 ? '+' : ''}${c.changePct}%`)),
+        el('td', {}, priceStatus(c.status), c.error && el('div', { class: 'small', style: 'color:var(--bad);max-width:240px', title: c.error }, c.error)),
+        el('td', { class: 'small' }, el('div', {}, 'Asked: ' + (c.requestedBy || '–')), c.appliedBy && el('div', { class: 'mute' }, 'Applied: ' + c.appliedBy)),
+        el('td', { class: 'small mute' }, fmtTime(c.appliedAt || c.createdAt)),
+        el('td', {}, el('div', { class: 'row wrapx', style: 'gap:6px' }, c.status === 'pending' && [el('button', { class: 'btn sm primary', onclick: () => priceAction(c, 'apply') }, 'Apply'), el('button', { class: 'btn sm', onclick: () => priceAction(c, 'cancel') }, 'Cancel')], c.status === 'applied' && el('button', { class: 'btn sm', onclick: () => priceAction(c, 'revert') }, 'Revert'))))))))
+      : el('p', { class: 'mute' }, PLSTATUS ? 'No changes with this status.' : 'No price changes yet. Open Products, choose Our store and press Change price, or use the Comparison page.')),
+  ];
+}
+
+const VIEWS = { overview, competitors, products, comparison, prices, store, changes, reports, digests, demo, account };
+const SUBS = { overview: () => (curComp() ? curComp().name + ' · ' : '') + (S.lastRun ? 'Last crawl ' + ago(S.lastRun) : 'Baseline crawl running…'), competitors: () => `${S.competitors.length} competitor${S.competitors.length === 1 ? '' : 's'} tracked`, products: () => (PD ? `${PD.total.toLocaleString()} product${PD.total === 1 ? '' : 's'} match` : 'Collected from your competitors'), store: () => 'Your own catalogue, compared with your rivals', comparison: () => 'Your prices against competitors, by jewellery type', prices: () => 'Request, review and apply price changes in Magento', changes: () => `${S.changes.length} detected in total`, reports: () => 'Weekly and monthly competitor activity', digests: () => 'AI-written summaries and actions', demo: () => 'Edit a test page, then crawl', account: () => 'Plan, billing and API access' };
 
 // ---------- actions ----------
 async function crawlNow() { if (S.running) return; document.querySelectorAll('#sCrawl').forEach((b) => (b.disabled = true)); toast('Crawling…'); try { await api('/api/crawl', { method: 'POST' }); await refresh(true); toast('Crawl complete'); } catch (e) { toast(e.message); } }
@@ -797,7 +918,7 @@ const go = (t) => { if (!allowed(t)) t = 'overview'; tab = t; location.hash = t;
 // ---------- shell ----------
 function renderNav() { // the Live demo tab only exists when demo competitors are enabled (real accounts see real data only)
   $('nav').replaceChildren(...NAV.map(([group, items]) => el('div', { class: 'navgroup' }, el('h3', {}, group),
-    items.filter(([k]) => (k !== 'demo' || can('demo')) && (k !== 'products' || feat('products')) && (k !== 'store' || (feat('store') && STORE_OK))).map(([k, label]) => el('button', { class: 'nav', 'data-k': k, onclick: () => go(k) }, icon(k), label, k === 'changes' && el('span', { class: 'cnt pill', id: 'cnt' }))))));
+    items.filter(([k]) => (k !== 'demo' || can('demo')) && (k !== 'products' || feat('products')) && (!['store', 'comparison', 'prices'].includes(k) || storeOn())).map(([k, label]) => el('button', { class: 'nav', 'data-k': k, onclick: () => go(k) }, icon(k), label, k === 'changes' && el('span', { class: 'cnt pill', id: 'cnt' }))))));
   document.querySelectorAll('.nav').forEach((b) => b.toggleAttribute('aria-current', false) || (b.dataset.k === tab && b.setAttribute('aria-current', 'page')));
 }
 function buildNav() {
@@ -828,9 +949,9 @@ async function refresh(force) {
   const q = '&competitor=' + encodeURIComponent(selComp);
   [ME, R.week, R.month] = await Promise.all([api('/api/me'), api('/api/reports?period=week' + q), api('/api/reports?period=month' + q)]);
   const next = [selComp, S.runs, S.running, S.changes.length, S.competitors.length, S.credits, S.digest?.ts, ME.plan, S.competitors.map((c) => [c.snapshots, c.error || '', c.enabled, c.crawling, c.progress?.pages, c.progress?.products, c.snapshot?.productCount, c.status].join(':')).join()].join('|');
-  const typing = ['cn', 'cu', 'site', 'fType', 'fComp', 'fComp2'].includes(document.activeElement?.id) || !!document.activeElement?.closest?.('#addform, #pfilters, #storeform');
+  const typing = ['cn', 'cu', 'site', 'fType', 'fComp', 'fComp2'].includes(document.activeElement?.id) || !!document.activeElement?.closest?.('#addform, #pfilters, #storeform, #cmpSettings, #pguard');
   paintShell();
-  if (force || (next !== sig && !typing)) { if (next !== sig && tab === 'products') PD = null; sig = next; paintView(); }
+  if (force || (next !== sig && !typing)) { if (next !== sig && tab === 'products') PD = null; if (next !== sig && tab === 'comparison') loadComparison(true); if (next !== sig && tab === 'prices') loadPrices(); sig = next; paintView(); }
 }
 function tickTimer() {
   if (!S) return;

@@ -133,3 +133,13 @@ def test_admin_sets_up_a_clients_store(client, site, conn, make_admin):
     assert mine["url"] == site.base and mine["enabled"] is False
     assert client.get(f"/api/admin/users/{uid}/store").status_code == 403
     assert client.request("DELETE", f"/api/admin/users/{uid}/store", json={}).status_code == 403
+
+
+def test_a_missing_encryption_key_is_a_clear_503_not_a_bare_500(client, site, monkeypatch):
+    from competitor_moves.core import crypto
+    magento(site, CATALOG)
+    signup(client)
+    monkeypatch.setattr(crypto, "get_settings", lambda: type("S", (), {"app_encryption_key": ""})())
+    r = client.put("/api/store", json={"url": site.base, "token": "secret"})
+    assert r.status_code == 503 and "APP_ENCRYPTION_KEY" in r.json()["error"], r.text
+    assert client.put("/api/store", json={"url": site.base}).status_code == 200  # no token to store: still fine

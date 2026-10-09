@@ -43,18 +43,24 @@ hammering one account with wrong passwords will (correctly) return 429 until the
 
 ## Native mode (the backend serves `/api/*`)
 
-`npm run test:native` runs `native.integration.mjs` (89 checks) against the real backend, worker and Postgres, through this Node server in native mode:
+`npm run test:native` runs `native.integration.mjs` (161 checks) against the real backend, worker and Postgres, through this Node server in native mode:
 accounts and plan changes, a real competitor crawl of a stand-in Shopify-style shop (`shop.mjs`, port 3998, editable through `/__edit?action=drop|rise|sale|oos|restock|add|reset`),
 competitor settings and scope, product search and facets, change detection (price drop, on sale, out of stock, new product, back in stock), reports,
-pause/resume, the `/v1` proxy, the admin panel and the audit log. It starts `shop.mjs` itself.
+pause/resume, the `/v1` proxy, the admin panel and the audit log. It starts `shop.mjs` (competitor, :3998) and `magento.mjs` (our store, :3997, token `good-token`) itself and also covers connecting and syncing the store, the comparison, price changes (preview/apply/revert/guardrails/a refusing Magento) and the agency approval flow.
 
 Start the backend pieces as above, but allow both stand-in sites through the SSRF guard and also run the scheduler if you want scheduled crawls:
 
 ```bash
-export HARNESS_ALLOW_LOCAL=127.0.0.1:3999,127.0.0.1:3998
+export HARNESS_ALLOW_LOCAL=127.0.0.1:3999,127.0.0.1:3998,127.0.0.1:3997
+export APP_ENCRYPTION_KEY=$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')   # needed to store a store token
 python integration/run_backend_api.py & python integration/run_backend_worker.py &
 BACKEND_URL=http://127.0.0.1:8000 npm start &          # prints "native mode"
 npm run test:native
 ```
 
 `npm run test:integration` still exercises the adapter: run it with `BACKEND_MODE=bff npm start`.
+
+## Browser tests
+
+`npm run test:browser` drives the real pages with Playwright against the same stack (set `PLAYWRIGHT_MODULE` to a Playwright install and `CHROMIUM` to a browser if the defaults don't resolve; screenshots go to `SHOTS_DIR`, default the temp folder):
+`landing.browser.mjs` (the landing page, mobile and reduced motion), `native.browser.mjs` (dashboard: settings, products, change types) and `native.browser.prices.mjs` (comparison, the price dialog, price changes, admin approvals). The last two start from `shop.mjs` and `magento.mjs`, so run those first (`node integration/shop.mjs & node integration/magento.mjs &`).

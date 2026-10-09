@@ -50,14 +50,14 @@ per-website change history, competitor settings, product search and an optional 
   Against an older backend that only has `/user`, `/admin` and `/v1`, it falls back to the **adapter** (accounts and crawl API from the backend, monitoring pipeline in Node).
   Force one with `BACKEND_MODE=native|bff`; the startup log says which is active.
 
-With a native backend the dashboard adds a **Products** page (filters from the backend's facets: category, metal, gemstone, stone, price range, on sale, in stock, search,
+With a native backend the dashboard adds a **Comparison** page (our prices against competitors by jewellery type, currency rates, shared SKUs), **price changes in Magento** (request, preview, apply, revert, guardrails, and agency approval in the admin panel), a **Products** page (filters from the backend's facets: category, metal, gemstone, stone, price range, on sale, in stock, search,
 sort), per-competitor **Settings** (product limit, page budget, scope by menu category, sort, schedule, advanced crawl settings), live crawl progress and
 "collected X of ~Y" on each card, the new change types (on sale, out of stock, new category, product updated, homepage changed) and, once the backend has `/api/store`, an
 **Our store** page and a Store button per customer in the admin panel. Standalone and adapter modes hide what they can't do.
 Real accounts start with an empty workspace and only real data (no Live demo tab).
 
 Full details, route mapping and what the backend still needs: [docs/integration/backend-integration.md](docs/integration/backend-integration.md).
-End-to-end checks: `npm run test:native` (native), `npm run test:integration` (adapter), `npm run test:auth` ([integration/README.md](integration/README.md)).
+End-to-end checks: `npm run test:native` (native, 161 checks), `npm run test:browser` (Playwright), `npm run test:integration` (adapter), `npm run test:auth` ([integration/README.md](integration/README.md)).
 
 ## SocialCrawl-style crawl API (per-user key, shown in Account & API)
 

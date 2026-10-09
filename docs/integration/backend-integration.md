@@ -20,8 +20,11 @@ Features are gated by `GET /api/plans -> backend` so the standalone demo and the
   scope (tick categories from `GET /api/competitors/{id}/categories`), advanced crawl settings. Only changed keys are sent on `PATCH`; clearing a numeric crawl setting sends `null` (back to the server default). The same fields are available (collapsed) when adding a competitor.
 * **Products**: `GET /api/products` with the facets feeding the dropdowns, 300 ms debounced search, price range, on sale / in stock, sort, paging (50), and an All competitors / Our store switch.
 * **Changes / reports**: labels and tags for `on_sale`, `out_of_stock`, `back_in_stock`, `product_updated`, `new_category`, `page_changed`; product counts use `snapshot.productCount` (the snapshot's `products` map only holds the 25 most recent).
+* **Comparison** (`GET /api/comparison`): price positioning per jewellery type (group-by: type, +metal, +stone, +carat), our median against each competitor with the gap in words ("36.5% cheaper than us"; `gapPct < 0` = competitor cheaper) and a price scale per row, a "They sell, we don't" list, shared-SKU matches with a *Change price* button, and a settings form (minimum price, minimum group size, currency rates). Without a rate, prices in another currency are shown but never compared; the backend's notes say so.
+* **Price changes in Magento** (the shared `priceDialog` in `common.js`): *Change price* on our products (Products → Our store) or a shared SKU → new price → **preview** (live price and cost from Magento, margin before/after, what shoppers pay when a sale price stays, warnings, position against competitor medians and the same product) → **Apply** (Magento is written first; if it refuses, the change is `failed` and nothing changed) → **Revert**. The *Price changes* page lists every change (status, who asked, who applied, Magento's error), filters by status, applies/cancels/reverts, and edits the guardrails (largest single change, lowest margin; locked when `adminOnly`).
+* **Digests**: the source badge shows `Gemini`, `Gemini + rules` or `rule-based`, and an action backed by evidence shows how many data points it cites.
 * **Our store** (appears when `GET /api/store` answers 200): connect (`PUT`), edit (`PATCH`: token omitted keeps it, `""` removes it, URL is fixed), pause/resume (`enabled`), sync now, disconnect, and "View our products" (`competitor=ours`).
-  **Admin**: a *Store* button per customer opens the same controls on `/api/admin/users/{id}/store` (shown when `backend.enabled` and `adminStore !== false`).
+  **Admin**: a *Store* button per customer opens the same controls on `/api/admin/users/{id}/store` (shown when `backend.enabled` and `adminStore !== false`), plus that client's **price section**: guardrails, the *only the agency applies price changes* switch (`adminOnly`), a SKU box to request a change for them, and their last changes with Apply/Cancel/Revert. A **Waiting for approval** card at the top of the admin page lists every client's pending change (`GET /api/admin/prices?status=pending`) with Apply and Cancel.
 
 Defensive details: snapshots with a missing profile, promotions or pages are normalised before rendering; the *Add a competitor* form is kept across repaints so a refresh never wipes what you typed;
 the dashboard polls every 2 s while a crawl runs and every 5 s otherwise.
@@ -95,15 +98,17 @@ Fixed while integrating (in `backend/`): `/api/auth/login` and `/api/auth/signup
 
 Still open:
 
-1. **`/api/store` routes** (Our store, `PATCH` and the admin `/users/{id}/store` routes) are documented but not in the backend code in this repository (`integrations/magento/` is empty). The UI is ready and appears automatically when `GET /api/store` answers; it was tested against a fake of the documented contract.
-2. **Comparison with our own prices and the AI analyst digest** (milestone M6; digests are rule-based, `source: "rules"`), **applying prices in Magento** (M7) and **production readiness** (M8: no public DB port, secrets, DB-backed rate limits, backups, CI).
-3. **Behind a proxy the backend must trust `X-Forwarded-For`** for its login limiter (uvicorn `--forwarded-allow-ips`; the default only trusts 127.0.0.1). Otherwise every user shares the proxy's IP.
-4. **Product images** are not shown: the pages' CSP is `img-src 'self' data:`. Allow `https:` in both `pages.py` and `server.js` if you want thumbnails.
-5. **The backend's own test-suite default** points at Postgres on :5433 (the compose file's published port); set `DATABASE_URL` otherwise.
+1. **Production readiness** (milestone M8): no public database port, secrets handling, rate limits stored in the database, backups, CI and deployment.
+2. **Magento permissions for price changes**: the integration token needs *Catalog → Inventory → Products* and, on 2.4.4+, *Allow OAuth Access Tokens to be used as standalone Bearer tokens = Yes*. Until then the preview falls back to the last synced price with a warning and Apply answers Magento's own 401 (the change is kept as `failed`). The end-to-end tests cover this path with a stand-in store.
+3. **`APP_ENCRYPTION_KEY`** must be set before a store token can be saved. Without it the backend now answers `503 {"error": "Storing a store token isn't set up on this server: ..."}` instead of a bare 500 (fixed here, with a test).
+4. **Behind a proxy the backend must trust `X-Forwarded-For`** for its login limiter (uvicorn `--forwarded-allow-ips`; the default only trusts 127.0.0.1). Otherwise every user shares the proxy's IP.
+5. **Product images** are not shown: the pages' CSP is `img-src 'self' data:`. Allow `https:` in both `pages.py` and `server.js` if you want thumbnails.
+6. **The backend's own test-suite default** points at Postgres on :5433 (the compose file's published port); set `DATABASE_URL` otherwise. One of its tests (`test_add_competitor_rules`) needs DNS for example.com.
 
 ## Verifying it
 
-* `npm run test:native`: 89 checks against the real backend through native mode (accounts, real product crawling of a stand-in shop, settings, product search, change detection, reports, admin, `/v1`).
+* `npm run test:native`: 161 checks against the real backend through native mode: accounts, real product crawling of a stand-in shop, settings, product search, change detection, reports, **our store** (connect, sync, pause, token), **comparison** with currency rates, **price changes** (preview, apply, revert, guardrails, a refusing Magento) and the **agency approval flow**, admin and `/v1`.
+* `npm run test:browser`: Playwright tests of the landing page (30 checks), the dashboard (23) and the comparison / price / admin screens (30).
 * `npm test`: unit tests, including the integration layer against an in-process fake of the backend's contract.
 * `npm run test:auth`: login/logout checks (58 standalone, 61 against the real backend: cookies, server-side session revocation,
   replay of old cookies, multiple devices, suspension, rate limiting, input handling). Works in both modes.

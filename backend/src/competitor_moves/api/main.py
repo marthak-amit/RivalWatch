@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from ..config import get_settings
+from ..core.crypto import CryptoError
 from ..db.pool import close_pool, get_pool
 from .routers import admin_users, auth_admin, auth_user, crawl_api, health, moves, pages, ui, ui_admin
 
@@ -31,6 +32,11 @@ def create_app() -> FastAPI:
     @app.exception_handler(ui.UiError)
     async def _ui_error(_: Request, e: ui.UiError):
         return JSONResponse(status_code=e.status, content={"error": e.message})
+
+    @app.exception_handler(CryptoError)
+    async def _crypto(_: Request, e: CryptoError):
+        # a server setting problem (no or wrong APP_ENCRYPTION_KEY), not a bug in the request: say so instead of a bare 500
+        return JSONResponse(status_code=503, content={"error": f"Storing a store token isn't set up on this server: {e}"})
 
     @app.exception_handler(crawl_api.ApiError)
     async def _api_error(_: Request, e: crawl_api.ApiError):

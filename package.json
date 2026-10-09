@@ -9,7 +9,8 @@
     "dev": "node --watch server.js",
     "test:integration": "node integration/backend.integration.mjs",
     "test:auth": "node integration/auth.integration.mjs",
-    "test:native": "node integration/native.integration.mjs"
+    "test:native": "node integration/native.integration.mjs",
+    "test:browser": "node integration/landing.browser.mjs && node integration/native.browser.mjs && node integration/native.browser.prices.mjs"
   },
   "engines": {
     "node": ">=20"
