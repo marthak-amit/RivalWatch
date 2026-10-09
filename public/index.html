@@ -84,13 +84,17 @@
   .fs-nav { display:flex; align-items:center; gap:18px; padding:12px 18px; border-bottom:1px solid var(--fl); } .fs-nav b { font-size:15px; margin-right:auto; letter-spacing:-.01em; } .fs-nav span { color:var(--fm); font-weight:600; }
   .fs-new { display:inline-flex; align-items:center; gap:5px; color:var(--fa) !important; max-width:0; opacity:0; overflow:hidden; white-space:nowrap; transition:max-width .7s cubic-bezier(.2,.8,.2,1), opacity .5s; } .fs-new.show { max-width:160px; opacity:1; }
   .fs-new i { font-style:normal; font-size:9px; font-weight:800; background:var(--fa); color:#fff; border-radius:4px; padding:2px 4px; }
-  .fs-promo { background:linear-gradient(90deg, #4f46e5, #0891b2); color:#fff; font-weight:700; text-align:center; padding:0 12px; max-height:0; overflow:hidden; transition:max-height .6s cubic-bezier(.2,.8,.2,1), padding .6s; } .fs-promo.show { max-height:40px; padding:9px 12px; }
-  .fs-hero { padding:20px 22px 6px; } .fs-hero h4 { font-size:21px; letter-spacing:-.02em; margin:0 0 3px; } .fs-hero p { color:var(--fm); margin:0; }
-  .fs-plans { display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; padding:14px 22px 20px; }
-  .fs-plan { border:1px solid var(--fl); border-radius:12px; padding:12px; } .fs-plan.hot { border-color:var(--fa); box-shadow:0 8px 24px rgba(79,70,229,.14); }
-  .fs-plan small { color:var(--fm); font-weight:700; text-transform:uppercase; font-size:10px; letter-spacing:.06em; } .fs-price { font-size:26px; font-weight:800; letter-spacing:-.03em; margin:2px 0 8px; display:flex; align-items:baseline; } .fs-price em { font-style:normal; font-size:11px; color:var(--fm); font-weight:600; margin-left:3px; }
-  .fs-plan > i { display:block; height:6px; border-radius:6px; background:var(--fl); margin-top:6px; } .fs-plan > i:nth-of-type(2) { width:72%; } .fs-plan > i:nth-of-type(3) { width:55%; }
-  .od { display:inline-flex; height:1em; line-height:1; overflow:hidden; } .od .dg { display:block; height:1em; overflow:hidden; } .od .dg > span { display:block; transition:transform .9s cubic-bezier(.2,.8,.2,1); } .od .dg i { display:block; height:1em; font-style:normal; }
+  .fs-promo { background:linear-gradient(90deg, #92400e, #d97706); color:#fff; font-weight:700; text-align:center; padding:0 12px; max-height:0; overflow:hidden; transition:max-height .6s cubic-bezier(.2,.8,.2,1), padding .6s; } .fs-promo.show { max-height:40px; padding:9px 12px; }
+  .fs-hero { padding:14px 18px 0; } .fs-hero h4 { font-size:18px; letter-spacing:-.02em; margin:0 0 2px; } .fs-hero p { color:var(--fm); margin:0; }
+  .fs-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:10px; padding:12px 18px 16px; }
+  .fs-prod { position:relative; min-width:0; transition:opacity .6s, transform .6s cubic-bezier(.2,.8,.2,1); } .fs-prod.late { opacity:0; transform:scale(.88) translateY(8px); } .fs-prod.late.show { opacity:1; transform:none; }
+  .fs-img { position:relative; height:84px; border-radius:10px; background:linear-gradient(150deg, #faf6ee, #efe5d3); display:grid; place-items:center; overflow:hidden; } .fs-img svg { width:46px; height:46px; transition:opacity .4s; }
+  .fs-name { font-weight:700; font-size:11.5px; margin:7px 0 1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .fs-meta { color:var(--fm); font-size:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .fs-price { font-size:17px; font-weight:800; letter-spacing:-.02em; margin-top:3px; display:flex; align-items:baseline; }
+  .fs-was { margin-left:6px; color:var(--fm); font-size:11px; font-weight:600; text-decoration:line-through; opacity:0; transition:opacity .5s; } .fs-was.show { opacity:1; }
+  .fs-badge { position:absolute; top:6px; left:6px; z-index:2; font-size:9px; font-weight:800; letter-spacing:.04em; padding:3px 6px; border-radius:6px; color:#fff; background:#e5392c; opacity:0; transform:translateY(-4px) scale(.9); transition:opacity .4s, transform .4s; } .fs-badge.show { opacity:1; transform:none; } .fs-badge.g { background:#12b76a; }
+  .fs-prod.sold .fs-img::after { content:"SOLD OUT"; position:absolute; inset:0; display:grid; place-items:center; background:rgba(255,255,255,.8); color:#b42318; font-weight:800; font-size:11px; letter-spacing:.08em; animation:fadein .5s; } .fs-prod.sold .fs-img svg { opacity:.4; }
+  .od { display:inline-flex; height:1em; line-height:1; overflow:hidden; font-variant-numeric:tabular-nums; } .od .dg { display:block; height:1em; overflow:hidden; } .od .dg > span { display:block; transition:transform .9s cubic-bezier(.2,.8,.2,1); } .od .dg i { display:block; height:1em; font-style:normal; }
   .fs-beam { position:absolute; left:0; right:0; top:-30%; height:28%; pointer-events:none; opacity:0; background:linear-gradient(180deg, transparent, color-mix(in srgb, #06b6d4 28%, transparent) 70%, rgba(6,182,212,.75) 99%, transparent); border-bottom:2px solid #06b6d4; box-shadow:0 8px 28px rgba(6,182,212,.55); }
   .fs-beam.go { animation:beam 1.5s cubic-bezier(.45,.05,.35,1) forwards; } @keyframes beam { 0% { top:-30%; opacity:0; } 12% { opacity:1; } 88% { opacity:1; } 100% { top:100%; opacity:0; } }
   .fs-hl { position:absolute; border:2px solid var(--bad); border-radius:10px; background:color-mix(in srgb, var(--bad) 10%, transparent); opacity:0; pointer-events:none; transition:left .35s, top .35s, width .35s, height .35s; }
@@ -98,7 +102,7 @@
   @keyframes hlpop { 0% { transform:scale(1.35); opacity:0; box-shadow:0 0 0 0 transparent; } 40% { opacity:1; } 100% { transform:none; box-shadow:0 0 0 10px transparent; } }
   .fs-flag { position:absolute; top:-12px; right:-6px; background:var(--bad); color:#fff; font-weight:800; font-size:11px; padding:3px 8px; border-radius:99px; white-space:nowrap; box-shadow:0 6px 16px rgba(0,0,0,.25); } .fs-hl.pos .fs-flag { background:#12b76a; }
 
-  .digest { position:relative; margin:-40px -18px 0 auto; width:min(400px, 92%); transform:translateZ(70px); padding:16px 16px 14px; border-radius:16px; background:color-mix(in srgb, var(--card) 86%, transparent); backdrop-filter:blur(18px) saturate(1.6); -webkit-backdrop-filter:blur(18px) saturate(1.6); border:1px solid var(--edge); box-shadow:0 30px 70px rgba(8,10,25,.4); }
+  .digest { position:relative; margin:-12px -18px 0 auto; width:min(400px, 92%); transform:translateZ(70px); padding:16px 16px 14px; border-radius:16px; background:color-mix(in srgb, var(--card) 86%, transparent); backdrop-filter:blur(18px) saturate(1.6); -webkit-backdrop-filter:blur(18px) saturate(1.6); border:1px solid var(--edge); box-shadow:0 30px 70px rgba(8,10,25,.4); }
   .digest .top { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
   .live { display:inline-flex; align-items:center; gap:7px; font-size:11px; font-weight:700; color:var(--good); text-transform:uppercase; letter-spacing:.06em; }
   #sum { font-size:13px; margin-bottom:4px; } #feed { min-height:94px; overflow:hidden; }
@@ -113,7 +117,7 @@
   .stepper span { font-size:11px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; padding:5px 11px; border-radius:99px; color:var(--mute); transition:background .3s, color .3s; } .stepper span.on { background:var(--acc); color:var(--acc-ink); }
   @keyframes float { 50% { transform:translateZ(110px) translateY(-9px); } }
   @media (max-width:1020px) { .digest { margin-right:-6px; } .chip.c1 { left:0; } }
-  @media (max-width:560px) { .cmp { height:400px; } .site { height:300px; } .fs-plans { gap:8px; padding:12px 14px 16px; } .fs-plan { padding:9px; } .fs-price { font-size:21px; } .digest { width:auto; margin:-34px 10px 0; transform:none; } .stepper { display:none; } }
+  @media (max-width:560px) { .cmp { height:400px; } .site { height:300px; } .fs-grid { gap:7px; padding:10px 12px 14px; } .fs-img { height:66px; } .fs-meta { display:none; } .fs-price { font-size:14px; } .digest { width:auto; margin:-34px 10px 0; transform:none; } .stepper { display:none; } }
 
   /* ---------- ticker ---------- */
   .ticker { border-block:1px solid var(--line); background:color-mix(in srgb, var(--card) 62%, transparent); backdrop-filter:blur(8px); overflow:hidden; padding:14px 0; margin-top:44px; -webkit-mask-image:linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); mask-image:linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); }
@@ -164,7 +168,7 @@
 
   /* compare slider */
   .cmp { --x:50%; position:relative; height:380px; max-width:980px; margin:0 auto; border-radius:22px; overflow:hidden; border:1px solid var(--edge); box-shadow:0 40px 100px rgba(8,10,25,.3); background:#fff; user-select:none; touch-action:pan-y; }
-  .cmp .layer { position:absolute; inset:0; } .cmp .layer.before { clip-path:inset(0 calc(100% - var(--x)) 0 0); }
+  .cmp .layer { position:absolute; inset:0; } .cmp .fs-grid { grid-template-columns:repeat(5, minmax(0, 1fr)); gap:14px; } .cmp .fs-img { height:96px; } .cmp .fs-img svg { width:54px; height:54px; } .cmp .fs-name { font-size:12.5px; } .cmp .fs-price { font-size:20px; } .cmp .layer.before { clip-path:inset(0 calc(100% - var(--x)) 0 0); }
   .cmp .layer .site { height:100%; }
   .cmp .lbl { position:absolute; bottom:14px; z-index:6; font:700 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; text-transform:uppercase; letter-spacing:.08em; padding:7px 11px; border-radius:99px; background:rgba(15,20,35,.78); color:#fff; backdrop-filter:blur(6px); } .cmp .lbl.l { left:14px; } .cmp .lbl.r { right:14px; }
   .cmp .handle { position:absolute; top:0; bottom:0; left:var(--x); width:2px; margin-left:-1px; background:#fff; box-shadow:0 0 0 1px rgba(0,0,0,.08), 0 0 18px rgba(79,70,229,.6); z-index:7; pointer-events:none; }
@@ -292,12 +296,12 @@
     <div class="tilt" id="tilt">
       <div class="chip c1" id="chip" aria-hidden="true">▼ 20.7% price drop</div>
       <div class="browser" aria-hidden="true">
-        <div class="bbar"><i></i><i></i><i></i><span class="burl" id="burl">acme-crm.example/pricing</span><span class="bstat" id="bstat">Watching</span></div>
+        <div class="bbar"><i></i><i></i><i></i><span class="burl" id="burl">lumen.example/collections/rings</span><span class="bstat" id="bstat">Watching</span></div>
         <div class="site" id="site">
-          <div class="fs-nav"><b id="fsBrand">Acme CRM</b><span>Product</span><span>Pricing</span><span>Docs</span><span class="fs-new" id="fsNew">AI assistant <i>NEW</i></span></div>
-          <div class="fs-promo" id="fsPromo">🏷 30% off annual plans, this week only</div>
-          <div class="fs-hero"><h4>Simple pricing for growing teams</h4><p>Switch plans any time.</p></div>
-          <div class="fs-plans" id="fsPlans"></div>
+          <div class="fs-nav"><b id="fsBrand">Lumen</b><span>Rings</span><span>Earrings</span><span>Necklaces</span><span class="fs-new" id="fsNew">Lab-Grown <i>NEW</i></span></div>
+          <div class="fs-promo" id="fsPromo">🏷 Autumn sale: up to 25% off earrings</div>
+          <div class="fs-hero"><h4>New this season</h4><p>Handmade in 18k gold, ethically sourced.</p></div>
+          <div class="fs-grid" id="fsGrid"></div>
           <div class="fs-beam" id="beam"></div>
           <div class="fs-hl" id="hl"><span class="fs-flag" id="flag"></span></div>
         </div>
@@ -327,29 +331,29 @@
     </ul>
   </div>
   <div class="panels" id="panels">
-    <div class="panel on" id="pn1"><div class="ptitle"><b>Crawling acme-crm.example</b><span class="pill good">robots.txt respected</span></div><svg class="map" id="map" viewBox="0 0 520 330" aria-hidden="true"></svg>
+    <div class="panel on" id="pn1"><div class="ptitle"><b>Crawling lumen.example</b><span class="pill good">robots.txt respected</span></div><svg class="map" id="map" viewBox="0 0 520 330" aria-hidden="true"></svg>
       <div class="meter"><span><b id="mPages">0</b>pages fetched</span><span><b id="mCred">0</b>credits</span><span><b>0</b>blocked</span></div></div>
     <div class="panel" id="pn2"><div class="ptitle"><b>Snapshot diff · Mon → Tue</b><span class="pill acc">5 changes</span></div>
-      <div class="drow same" style="--k:0"><span>·</span><span>Growth plan &nbsp;$79</span><span class="tg">same</span></div>
-      <div class="drow chg2" style="--k:1"><span>~</span><span>CRM Lite &nbsp;<s>$29</s> → <b>$23</b> &nbsp;(−20.7%)</span><span class="tg">price</span></div>
-      <div class="drow add" style="--k:2"><span>+</span><span>Enterprise AI tier &nbsp;$499/mo</span><span class="tg">product</span></div>
-      <div class="drow add" style="--k:3"><span>+</span><span>/ai-assistant</span><span class="tg">new page</span></div>
-      <div class="drow add" style="--k:4"><span>+</span><span>“30% off annual plans”</span><span class="tg">promo</span></div>
-      <div class="drow del" style="--k:5"><span>−</span><span>“Free setup for annual plans”</span><span class="tg">ended</span></div></div>
+      <div class="drow same" style="--k:0"><span>·</span><span>Pavé Band &nbsp;£80.00</span><span class="tg">same</span></div>
+      <div class="drow chg2" style="--k:1"><span>~</span><span>Oval Halo Ring &nbsp;<s>£750</s> → <b>£595</b> &nbsp;(−20.7%)</span><span class="tg">price</span></div>
+      <div class="drow chg2" style="--k:2"><span>~</span><span>Gold Hoop Earrings &nbsp;<s>£160</s> → <b>£120</b></span><span class="tg">on sale</span></div>
+      <div class="drow add" style="--k:3"><span>+</span><span>Emerald Cocktail Ring &nbsp;£980</span><span class="tg">new</span></div>
+      <div class="drow add" style="--k:4"><span>+</span><span>New category: Lab-Grown</span><span class="tg">category</span></div>
+      <div class="drow del" style="--k:5"><span>−</span><span>Pearl Pendant &nbsp;in stock → sold out</span><span class="tg">stock</span></div></div>
     <div class="panel" id="pn3"><div class="ptitle"><b>AI digest · suggested actions</b><span class="pill acc">3 of 3</span></div>
-      <div class="act" style="--k:0"><span class="ck">✓</span><div><b>Review our pricing against Acme's CRM Lite cut</b><span class="w">They dropped 20.7%. Decide whether to match, bundle, or differentiate.</span></div><span class="hi small">high</span></div>
-      <div class="act" style="--k:1"><span class="ck">✓</span><div><b>Counter Initech's promotion</b><span class="w">30% off annual plans launched this week.</span></div><span class="hi small">high</span></div>
-      <div class="act" style="--k:2"><span class="ck">✓</span><div><b>Read Globex's new AI assistant page</b><span class="w">New pages signal launches; update battlecards.</span></div><span class="lo small">low</span></div></div>
-  </div>
-</div></div></section>
+      <div class="act" style="--k:0"><span class="ck">✓</span><div><b>Review our Oval Halo Ring price against Lumen's cut</b><span class="w">They dropped 20.7% to £595. Decide whether to match, bundle, or differentiate on quality.</span></div><span class="hi small">high</span></div>
+      <div class="act" style="--k:1"><span class="ck">✓</span><div><b>Check Aurelia's sale on Gold Hoop Earrings</b><span class="w">Now £120 (was £160). Consider a time-boxed offer on your hoops.</span></div><span class="hi small">high</span></div>
+      <div class="act" style="--k:2"><span class="ck">✓</span><div><b>Assess Solenne's new Emerald Cocktail Ring</b><span class="w">Added at £980. Check overlap with your catalogue and whether you have a gap.</span></div><span class="md small">medium</span></div></div>
+  </div></div></section>
 
 <section id="diff" class="band"><div class="wrap">
   <span class="kicker rv">Time machine</span>
   <h2 class="rv">Scrub through time. <span class="gt">See exactly what moved.</span></h2><p class="sub rv">Every snapshot is stored. Drag the handle to compare Monday with Tuesday and spot the changes.</p>
   <div class="cmp rv" id="cmp"><div class="layer after" id="cmpA"></div><div class="layer before" id="cmpB"></div><span class="lbl l">Mon 09:00 · before</span><span class="lbl r">Tue 09:00 · after</span><div class="handle"></div>
-    <button class="hp" style="left:9%;top:46%" aria-label="CRM Lite price dropped"><span>CRM Lite: $29 → $23 (−20.7%)</span></button>
-    <button class="hp" style="left:96%;top:17%" aria-label="New promotion"><span>New promotion detected</span></button>
-    <button class="hp g" style="left:85%;top:9%" aria-label="New page"><span>New page: /ai-assistant</span></button>
+    <button class="hp" style="left:12.5%;top:74%" aria-label="Oval Halo Ring price dropped"><span>Oval Halo Ring: £750 → £595 (−20.7%)</span></button>
+    <button class="hp" style="left:70%;top:15%" aria-label="New promotion"><span>New promotion: up to 25% off earrings</span></button>
+    <button class="hp" style="left:57%;top:51%" aria-label="Pearl Pendant out of stock"><span>Pearl Pendant: out of stock</span></button>
+    <button class="hp g" style="left:96%;top:47%" aria-label="New product"><span>New product: Emerald Cocktail Ring £980</span></button>
     <input type="range" id="cmpR" min="0" max="100" value="50" aria-label="Compare Monday and Tuesday snapshots"></div>
   <p class="cmp-note rv">Hover the pulsing dots. Both snapshots are rendered from stored data.</p>
 </div></section>
@@ -364,7 +368,7 @@
       <div class="ic" style="position:absolute;top:20px;right:20px">💲</div><h3>Product &amp; price tracking</h3><p>See every price move with the exact percentage, plus products added, removed, on sale or out of stock.</p></div>
     <div class="card tile t2 spot rv" style="--d:.08s"><div class="viz"><div class="mq"><div><span>30% off annual</span><span>Free shipping</span><span>Black Friday</span><span>BOGO earrings</span><span>30% off annual</span><span>Free shipping</span><span>Black Friday</span><span>BOGO earrings</span></div><div><span>Code SAVE20</span><span>Bundle &amp; save</span><span>Free setup</span><span>Student deal</span><span>Code SAVE20</span><span>Bundle &amp; save</span><span>Free setup</span><span>Student deal</span></div><div><span>Limited: 48h</span><span>Gift with purchase</span><span>-15% first order</span><span>Limited: 48h</span><span>Gift with purchase</span><span>-15% first order</span></div></div></div><h3>Promotion detection</h3><p>Catch new discounts, codes and limited-time offers the moment they appear.</p></div>
     <div class="card tile t2 spot rv"><div class="viz"><div class="radar"><i style="left:70%;top:26%;--bd:.5s"></i><i style="left:26%;top:44%;--bd:1.7s"></i><i style="left:58%;top:78%;--bd:2.6s"></i><i style="left:40%;top:18%;--bd:3.4s"></i></div></div><h3>New page radar</h3><p>Launch pages and repositioning show up as new URLs before the press release.</p></div>
-    <div class="card tile t2 spot rv" style="--d:.08s"><div class="viz"><div class="term" aria-hidden="true"><span class="l" style="--k:0"><b>3 changes</b> across 3 rivals</span><span class="l" style="--k:1"><span class="h">●</span> <b>Review</b> Acme's CRM Lite cut</span><span class="l" style="--k:2"><span class="h">●</span> <b>Counter</b> Initech's promo</span><span class="l" style="--k:3"><span class="m">●</span> <b>Read</b> Globex's AI page</span></div></div><h3>AI digest</h3><p>Plain-English summary and 3–5 prioritised actions after every crawl that finds changes.</p></div>
+    <div class="card tile t2 spot rv" style="--d:.08s"><div class="viz"><div class="term" aria-hidden="true"><span class="l" style="--k:0"><b>4 changes</b> across 3 rivals</span><span class="l" style="--k:1"><span class="h">●</span> <b>Review</b> Lumen's ring price cut</span><span class="l" style="--k:2"><span class="h">●</span> <b>Check</b> Aurelia's hoop sale</span><span class="l" style="--k:3"><span class="m">●</span> <b>Assess</b> Solenne's new emerald ring</span></div></div><h3>AI digest</h3><p>Plain-English summary and 3–5 prioritised actions after every crawl that finds changes.</p></div>
     <div class="card tile t2 spot rv" style="--d:.16s"><div class="viz"><div class="bars" aria-hidden="true"><div style="--k:0"><i style="--h:30%;--k:0"></i><i style="--h:22%;--k:0"></i></div><div><i style="--h:18%;--k:1"></i><i style="--h:40%;--k:1"></i></div><div><i style="--h:44%;--k:2"></i><i style="--h:30%;--k:2"></i></div><div><i style="--h:26%;--k:3"></i><i style="--h:12%;--k:3"></i></div><div><i style="--h:50%;--k:4"></i><i style="--h:36%;--k:4"></i></div><div><i style="--h:20%;--k:5"></i><i style="--h:26%;--k:5"></i></div><div><i style="--h:34%;--k:6"></i><i style="--h:18%;--k:6"></i></div></div></div><h3>Weekly &amp; monthly reports</h3><p>Trends per competitor, biggest price moves, CSV export and a one-click summary.</p></div>
     <div class="card tile t3 spot rv"><div class="viz"><div class="bignum"><span data-count="1462">1,462</span></div><div class="small mute" style="margin-top:4px">products read from one real store in about 17 seconds</div><div class="chips"><span>Rings</span><span>18k gold</span><span>Diamond</span><span>Under £500</span><span>On sale</span><span>In stock</span></div></div><h3>Catalogue search with real filters</h3><p>Filter every competitor product by category, metal, gemstone, price, sale and stock, like a shop's own category page.</p></div>
     <div class="card tile t3 spot rv" style="--d:.08s"><div class="viz"><pre class="code" aria-hidden="true"><span class="c"># crawl any site with your own key, 1 credit per page</span>
@@ -579,13 +583,29 @@ function odo(host, text) { // rolling digits
   if (!same) { host.replaceChildren(...[...text].map((ch) => /\d/.test(ch) ? el('span', { class: 'dg' }, el('span', {}, ...Array.from({ length: 10 }, (_, d) => el('i', {}, String(d))))) : el('span', {}, ch))); host.dataset.len = text.length; }
   [...text].forEach((ch, i) => { const col = host.children[i]; if (/\d/.test(ch) && col.classList.contains('dg')) { col.firstChild.style.transition = same ? '' : 'none'; col.firstChild.style.transform = `translateY(${-(+ch)}em)`; } });
 }
+const GOLD = '#d4a017', GEM = { // small line illustrations for the demo shop
+  ring: `<svg viewBox="0 0 60 60" aria-hidden="true"><circle cx="30" cy="38" r="13" fill="none" stroke="${GOLD}" stroke-width="5"/><path d="M22 22l8-11 8 11-8 9z" fill="#e0f2fe" stroke="#38bdf8" stroke-width="1.6" stroke-linejoin="round"/><path d="M22 22h16M30 11v20" stroke="#7dd3fc" stroke-width="1"/></svg>`,
+  emerald: `<svg viewBox="0 0 60 60" aria-hidden="true"><circle cx="30" cy="40" r="13" fill="none" stroke="${GOLD}" stroke-width="5"/><rect x="22" y="12" width="16" height="19" rx="3" fill="#86efac" stroke="#16a34a" stroke-width="1.8"/><rect x="26" y="16" width="8" height="11" rx="1.5" fill="none" stroke="#16a34a" stroke-width="1"/></svg>`,
+  band: `<svg viewBox="0 0 60 60" aria-hidden="true"><circle cx="30" cy="34" r="16" fill="none" stroke="${GOLD}" stroke-width="6"/><circle cx="30" cy="17" r="2.4" fill="#e0f2fe" stroke="#38bdf8"/><circle cx="20" cy="20" r="2" fill="#e0f2fe" stroke="#38bdf8"/><circle cx="40" cy="20" r="2" fill="#e0f2fe" stroke="#38bdf8"/></svg>`,
+  earrings: `<svg viewBox="0 0 60 60" aria-hidden="true"><g fill="#f5c542" stroke="${GOLD}" stroke-width="1.5"><circle cx="19" cy="12" r="3"/><path d="M19 15v8"/><path d="M19 24c-6 7-6 16 0 16s6-9 0-16z"/><circle cx="41" cy="12" r="3"/><path d="M41 15v8"/><path d="M41 24c-6 7-6 16 0 16s6-9 0-16z"/></g></svg>`,
+  pendant: `<svg viewBox="0 0 60 60" aria-hidden="true"><path d="M8 8c4 24 40 24 44 0" fill="none" stroke="${GOLD}" stroke-width="2"/><circle cx="30" cy="38" r="9" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2"/><circle cx="27" cy="35" r="2.5" fill="#fff"/></svg>`,
+  necklace: `<svg viewBox="0 0 60 60" aria-hidden="true"><path d="M8 10c4 28 40 28 44 0" fill="none" stroke="${GOLD}" stroke-width="3" stroke-dasharray="1 3.5" stroke-linecap="round"/><circle cx="30" cy="39" r="4" fill="#f5c542" stroke="${GOLD}"/></svg>`,
+  bracelet: `<svg viewBox="0 0 60 60" aria-hidden="true"><ellipse cx="30" cy="32" rx="22" ry="12" fill="none" stroke="${GOLD}" stroke-width="4"/><g fill="#e0f2fe" stroke="#38bdf8"><circle cx="12" cy="36" r="3"/><circle cx="22" cy="42" r="3"/><circle cx="38" cy="42" r="3"/><circle cx="48" cy="36" r="3"/></g></svg>`,
+};
+// product: [name, drawing, price in £, detail, arrives later?]
 const SCEN = [
-  { brand: 'Acme CRM', url: 'acme-crm.example/pricing', plans: [['Lite', 29], ['Growth', 79, 1], ['Enterprise', 199]], target: 'price', flag: '▼ −20.7%', chip: '▼ 20.7% price drop', pos: false,
-    row: ['price_change', 'price change', 'Acme CRM', 'CRM Lite $29 → $23 (−20.7%)'], act: ['Review our pricing against Acme’s CRM Lite cut', 'high'] },
-  { brand: 'Initech', url: 'initech.example/helpdesk', plans: [['Basic', 19], ['Plus', 49, 1], ['Scale', 129]], target: 'promo', flag: '+ promo', chip: '＋ New promotion', pos: true,
-    row: ['new_promo', 'new promo', 'Initech', '30% off annual plans'], act: ['Counter Initech’s promotion', 'high'] },
-  { brand: 'Globex', url: 'globex.example/pricing', plans: [['Solo', 29], ['Team', 49, 1], ['Business', 99]], target: 'nav', flag: '+ new page', chip: '＋ New page /ai-assistant', pos: true,
-    row: ['new_page', 'new page', 'Globex', '/ai-assistant'], act: ['Read Globex’s new AI assistant page', 'low'] },
+  { brand: 'Lumen', url: 'lumen.example/collections/rings', products: [['Oval Halo Ring', 'ring', 750, '18k gold · diamond'], ['Pavé Band', 'band', 80, '9k gold'], ['Pearl Pendant', 'pendant', 450, 'Freshwater pearl'], ['Stud Earrings', 'earrings', 300, 'Diamond studs']],
+    target: 'price', to: '595', flag: '▼ −20.7%', chip: '▼ 20.7% price drop', pos: false,
+    row: ['price_change', 'price change', 'Lumen', 'Oval Halo Ring £750 → £595 (−20.7%)'], act: ['Review our Oval Halo Ring price against Lumen’s cut', 'high'] },
+  { brand: 'Aurelia', url: 'aurelia.example/earrings', products: [['Gold Hoop Earrings', 'earrings', 160, '18k gold plated'], ['Opal Ring', 'ring', 240, 'Australian opal'], ['Tennis Bracelet', 'bracelet', 980, 'Lab-grown diamond'], ['Drop Earrings', 'earrings', 210, 'Sterling silver']],
+    target: 'sale', to: '120', was: '£160', badge: 'SALE −25%', flag: '🏷 −25%', chip: '🏷 On sale, −25%', pos: false,
+    row: ['on_sale', 'on sale', 'Aurelia', 'Gold Hoop Earrings £160 → £120 (−25%)'], act: ['Check Aurelia’s sale on Gold Hoop Earrings', 'high'] },
+  { brand: 'Solenne', url: 'solenne.example/new-in', products: [['Sapphire Ring', 'ring', 620, 'Ceylon sapphire'], ['Pearl Studs', 'earrings', 95, 'Akoya pearl'], ['Rope Chain', 'necklace', 340, '18k gold vermeil'], ['Emerald Cocktail Ring', 'emerald', 980, 'Natural emerald', true]],
+    target: 'new', badge: 'NEW', flag: '+ new', chip: '＋ New product', pos: true,
+    row: ['product_added', 'new product', 'Solenne', 'Emerald Cocktail Ring at £980'], act: ['Assess Solenne’s new Emerald Cocktail Ring', 'medium'] },
+  { brand: 'Lumen', url: 'lumen.example/collections/necklaces', products: [['Pearl Pendant', 'pendant', 450, 'Freshwater pearl'], ['Solitaire Ring', 'ring', 1200, '1ct lab diamond'], ['Gold Hoop Earrings', 'earrings', 120, '18k gold'], ['Pavé Band', 'band', 80, '9k gold']],
+    target: 'oos', flag: '✕ sold out', chip: '✕ Out of stock', pos: true,
+    row: ['out_of_stock', 'out of stock', 'Lumen', 'Pearl Pendant'], act: ['Win Lumen’s Pearl Pendant shoppers while it’s sold out', 'medium'] },
 ];
 let changes = 0, scen = 0, paused = false;
 const site = $('site'), hl = $('hl'), beam = $('beam'), stat = $('bstat');
@@ -594,30 +614,38 @@ async function typeInto(node, text) { node.classList.add('caret'); node.textCont
 const step = (n) => [1, 2, 3].forEach((i) => $('st' + i).classList.toggle('on', i === n));
 function renderSite(s) {
   $('fsBrand').textContent = s.brand; $('burl').textContent = s.url; $('fsNew').classList.remove('show'); $('fsPromo').classList.remove('show');
-  $('fsPlans').replaceChildren(...s.plans.map(([n, p, hot], i) => el('div', { class: 'fs-plan' + (hot ? ' hot' : '') }, el('small', {}, n), el('div', { class: 'fs-price' }, '$', el('span', { class: 'od', id: 'pr' + i }), el('em', {}, '/mo')), el('i'), el('i'), el('i'))));
-  s.plans.forEach(([, p], i) => odo($('pr' + i), String(p)));
+  $('fsGrid').replaceChildren(...s.products.map(([n, k, price, meta, late], i) => {
+    const img = el('div', { class: 'fs-img' }); img.innerHTML = GEM[k]; img.append(el('span', { class: 'fs-badge' + (s.target === 'new' ? ' g' : ''), id: 'fb' + i }, s.badge || ''));
+    return el('div', { class: 'fs-prod' + (late ? ' late' : ''), id: 'fp' + i }, img, el('div', { class: 'fs-name' }, n), el('div', { class: 'fs-meta' }, meta),
+      el('div', { class: 'fs-price' }, '£', el('span', { class: 'od', id: 'pr' + i }), el('s', { class: 'fs-was', id: 'fw' + i })));
+  }));
+  s.products.forEach(([, , price], i) => odo($('pr' + i), price.toLocaleString('en')));
   hl.classList.remove('show'); $('chip').classList.add('hide');
 }
 function placeHL(target, pos, flag) {
-  const t = target === 'price' ? $('fsPlans').firstChild.querySelector('.fs-price') : target === 'promo' ? $('fsPromo') : $('fsNew');
-  const [x, y] = posOf(t); const w = target === 'promo' ? site.clientWidth - 8 : t.offsetWidth + 14, hgt = t.offsetHeight + (target === 'nav' ? 12 : 8);
-  Object.assign(hl.style, { left: (target === 'promo' ? 4 : x - 7) + 'px', top: y - 4 + 'px', width: w + 'px', height: hgt + 'px' }); hl.classList.toggle('pos', pos); $('flag').textContent = flag; hl.classList.remove('show'); void hl.offsetWidth; hl.classList.add('show');
+  const t = target === 'price' || target === 'sale' ? $('fp0').querySelector('.fs-price') : target === 'new' ? $('fp3') : $('fp0').querySelector('.fs-img');
+  const [x, y] = posOf(t), pad = target === 'price' || target === 'sale' ? 6 : 4;
+  Object.assign(hl.style, { left: x - pad + 'px', top: y - pad + 'px', width: t.offsetWidth + pad * 2 + 'px', height: t.offsetHeight + pad * 2 + 'px' });
+  hl.classList.toggle('pos', pos); $('flag').textContent = flag; hl.classList.remove('show'); void hl.offsetWidth; hl.classList.add('show');
 }
 async function play(s) {
   renderSite(s); step(1); stat.className = 'bstat'; stat.textContent = 'Crawling…'; await sleep(REDUCED ? 0 : 600);
   beam.classList.remove('go'); void beam.offsetWidth; if (!REDUCED) beam.classList.add('go'); await sleep(REDUCED ? 0 : 1500);
   step(2); stat.className = 'bstat det'; stat.textContent = 'Diffing…'; await sleep(REDUCED ? 0 : 500);
-  if (s.target === 'price') { odo($('pr0'), '23'); await sleep(REDUCED ? 0 : 450); } else if (s.target === 'promo') { $('fsPromo').textContent = '🏷 30% off annual plans, this week only'; $('fsPromo').classList.add('show'); await sleep(REDUCED ? 0 : 700); } else { $('fsNew').classList.add('show'); await sleep(REDUCED ? 0 : 750); }
+  if (s.target === 'price') { odo($('pr0'), s.to); await sleep(REDUCED ? 0 : 450); }
+  else if (s.target === 'sale') { odo($('pr0'), s.to); $('fw0').textContent = s.was; $('fw0').classList.add('show'); $('fb0').classList.add('show'); $('fsPromo').classList.add('show'); await sleep(REDUCED ? 0 : 750); }
+  else if (s.target === 'new') { $('fsNew').classList.add('show'); $('fp3').classList.add('show'); $('fb3').classList.add('show'); await sleep(REDUCED ? 0 : 800); }
+  else { $('fp0').classList.add('sold'); await sleep(REDUCED ? 0 : 600); }
   placeHL(s.target, s.pos, s.flag); const chip = $('chip'); chip.textContent = s.chip; chip.classList.toggle('pos', s.pos); chip.classList.remove('hide');
   stat.className = 'bstat ok'; stat.textContent = 'Change found'; await sleep(REDUCED ? 0 : 900);
   step(3); changes++; const f = $('feed'); const [cls, label, who, what] = s.row;
   f.prepend(el('div', { class: 'chg in' }, el('span', { class: 'tag ' + cls }, label), el('span', {}, el('b', {}, who + ' '), what))); while (f.children.length > 3) f.lastChild.remove();
   $('sum').textContent = `${changes} change${changes === 1 ? '' : 's'} detected across 3 competitors.`;
-  const li = el('li', {}, el('b'), ' ', el('span', { class: s.act[1] === 'high' ? 'hi' : 'lo' }, `(${s.act[1]})`)); $('acts').prepend(li); while ($('acts').children.length > 3) $('acts').lastChild.remove();
+  const li = el('li', {}, el('b'), ' ', el('span', { class: { high: 'hi', medium: 'md', low: 'lo' }[s.act[1]] }, `(${s.act[1]})`)); $('acts').prepend(li); while ($('acts').children.length > 3) $('acts').lastChild.remove();
   await typeInto(li.firstChild, s.act[0]); await sleep(REDUCED ? 0 : 2600);
 }
 (async function theater() {
-  renderSite(SCEN[0]); step(0);
+  renderSite(SCEN[0]); step(0); if (REDUCED) $('fp3')?.classList.add('show');
   if (REDUCED) { for (const s of SCEN) await play(s); return; }
   const vis = new IntersectionObserver(([e]) => { paused = !e.isIntersecting; }); vis.observe($('stage'));
   await sleep(1400);
@@ -634,12 +662,12 @@ async function play(s) {
 // pinned story
 // ====================================================================================================
 (function buildMap() {
-  const NS = 'http://www.w3.org/2000/svg', svg = $('map'), cx = 260, cy = 150, paths = ['/pricing', '/products', '/blog', '/changelog', '/careers', '/promo', '/docs', '/about'];
+  const NS = 'http://www.w3.org/2000/svg', svg = $('map'), cx = 260, cy = 150, paths = ['/rings', '/earrings', '/necklaces', '/sale', '/new-in', '/products.json', '/sitemap.xml', '/pages/care'];
   const mk = (t, a) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); return e; };
   const nodes = paths.map((p, i) => { const ang = (i / paths.length) * Math.PI * 2 - Math.PI / 2 + .2; return { p, x: cx + Math.cos(ang) * 190, y: cy + Math.sin(ang) * 112, d: .5 + i * .22 }; });
   nodes.forEach((n) => { const len = Math.hypot(n.x - cx, n.y - cy); svg.append(mk('line', { x1: cx, y1: cy, x2: n.x, y2: n.y, class: 'ln', style: `--len:${len};--d:${n.d}s` }));
     const dot = mk('circle', { r: 3.2, fill: 'var(--cyan)' }); dot.append(mk('animateMotion', { dur: '2.4s', repeatCount: 'indefinite', begin: n.d + 's', path: `M${cx},${cy} L${n.x},${n.y}` })); svg.append(dot); });
-  svg.append(mk('circle', { cx, cy, r: 22, class: 'halo' }), mk('circle', { cx, cy, r: 24, class: 'core' })); const t = mk('text', { x: cx, y: cy + 4, 'text-anchor': 'middle', style: 'fill:#fff;font-size:9px' }); t.textContent = 'acme-crm'; svg.append(t);
+  svg.append(mk('circle', { cx, cy, r: 22, class: 'halo' }), mk('circle', { cx, cy, r: 24, class: 'core' })); const t = mk('text', { x: cx, y: cy + 4, 'text-anchor': 'middle', style: 'fill:#fff;font-size:9px' }); t.textContent = 'lumen'; svg.append(t);
   nodes.forEach((n) => { svg.append(mk('circle', { cx: n.x, cy: n.y, r: 9, class: 'nd', style: `--d:${n.d}s` })); const l = mk('text', { x: n.x, y: n.y + 24, 'text-anchor': 'middle', class: 'lb', style: `--d:${n.d}s` }); l.textContent = n.p; svg.append(l); });
 })();
 const storyEl = document.querySelector('.story'), steps = [...document.querySelectorAll('#ssteps li')], panels = ['pn1', 'pn2', 'pn3'].map($); let curStep = -1, counter = null;
@@ -662,12 +690,12 @@ addEventListener('resize', story); story();
 // time machine: before / after compare
 // ====================================================================================================
 function snapshot(after) {
-  const plans = [['Lite', after ? 23 : 29], ['Growth', 79, 1], ['Enterprise', 199]];
-  return `<div class="site"><div class="fs-nav"><b>Acme CRM</b><span>Product</span><span>Pricing</span><span>Docs</span>${after ? '<span class="fs-new show">AI assistant <i>NEW</i></span>' : ''}</div>
-  <div class="fs-promo ${after ? 'show' : ''}">🏷 30% off annual plans, this week only</div>
-  <div class="fs-hero"><h4>Simple pricing for growing teams</h4><p>Switch plans any time.</p></div>
-  <div class="fs-plans">${plans.map(([n, p, hot]) => `<div class="fs-plan ${hot ? 'hot' : ''}"><small>${n}</small><div class="fs-price">$${p}<em>/mo</em></div><i></i><i></i><i></i></div>`).join('')}</div>
-  <div class="fs-hero" style="padding-top:6px"><p>${after ? 'Now with the new AI assistant, included on every plan.' : 'Cancel any time. No contracts. Free setup for annual plans.'}</p></div></div>`;
+  const P = [['Oval Halo Ring', 'ring', after ? 595 : 750, '18k gold · diamond'], ['Pavé Band', 'band', 80, '9k gold'], ['Pearl Pendant', 'pendant', 450, 'Freshwater pearl', 0, after], ['Stud Earrings', 'earrings', 300, 'Diamond studs']];
+  if (after) P.push(['Emerald Cocktail Ring', 'emerald', 980, 'Natural emerald', 1]);
+  return `<div class="site"><div class="fs-nav"><b>Lumen</b><span>Rings</span><span>Earrings</span><span>Necklaces</span><span>Sale</span>${after ? '<span class="fs-new show">Lab-Grown <i>NEW</i></span>' : ''}</div>
+  <div class="fs-promo ${after ? 'show' : ''}">🏷 Autumn sale: up to 25% off earrings</div>
+  <div class="fs-hero"><h4>New this season</h4><p>${after ? 'Free engraving on every ring this week.' : 'Handmade in 18k gold, ethically sourced.'}</p></div>
+  <div class="fs-grid">${P.map(([n, k, pr, m, isNew, sold]) => `<div class="fs-prod ${sold ? 'sold' : ''}"><div class="fs-img">${GEM[k]}${isNew ? '<span class="fs-badge g show">NEW</span>' : ''}</div><div class="fs-name">${n}</div><div class="fs-meta">${m}</div><div class="fs-price">£${pr.toLocaleString()}</div></div>`).join('')}</div></div>`;
 }
 $('cmpA').innerHTML = snapshot(true); $('cmpB').innerHTML = snapshot(false);
 (function compare() {

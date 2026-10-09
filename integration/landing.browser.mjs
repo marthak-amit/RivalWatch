@@ -41,8 +41,8 @@ const quiet = (e) => !/GL Driver|GroupMarker|swiftshader|ReadPixels/i.test(e);
   // compare slider
   await p.evaluate(() => document.getElementById('cmp').scrollIntoView({ block: 'center' })); await sleep(4200);
   await p.fill('#cmpR', '20'); ok(await p.evaluate(() => document.getElementById('cmp').style.getPropertyValue('--x')) === '20%', 'compare slider follows the range input');
-  ok(await p.locator('.cmp .hp').count() === 3, 'three change hotspots');
-  await p.hover('.cmp .hp >> nth=0'); await sleep(300); ok(await p.locator('.cmp .hp >> nth=0').locator('span').evaluate((s) => getComputedStyle(s).opacity) === '1', 'hotspot tooltip shows on hover');
+  ok(await p.locator('.cmp .hp').count() === 4, 'four change hotspots');
+  await sleep(800); await p.hover('.cmp .hp >> nth=0'); ok(await p.waitForFunction(() => getComputedStyle(document.querySelector('.cmp .hp span')).opacity === '1', null, { timeout: 3000 }).then(() => true, () => false), 'hotspot tooltip shows on hover');
   // plan flow
   await p.evaluate(() => document.getElementById('pricing').scrollIntoView()); await sleep(800);
   await p.click('#plans .plan >> nth=1 >> button'); await sleep(300); ok(await p.locator('#loader.show').count() === 1 && /Pro/.test(await p.locator('#ltitle').innerText()), 'choosing a plan shows the loader');
