@@ -1,0 +1,11 @@
+{
+  "name": "rivalwatch",
+  "version": "0.1.0",
+  "description": "AI competitor intelligence agent demo: scheduled crawl, snapshot diff, AI digest",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "engines": { "node": ">=20" }
+}

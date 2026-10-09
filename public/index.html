@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RivalWatch</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#16181d; --mute:#667085; --line:#e4e7ec; --acc:#4f46e5; --good:#12b76a; --bad:#f04438; --warn:#f79009; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0f1115; --card:#181b21; --ink:#eef0f4; --mute:#98a2b3; --line:#2a2f38; --acc:#8b87ff; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui,sans-serif; }
+  main { max-width:1100px; margin:0 auto; padding:20px 16px 60px; }
+  header { display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between; margin-bottom:16px; }
+  h1 { margin:0; font-size:22px; } h1 small { color:var(--mute); font-weight:400; font-size:14px; margin-left:8px; }
+  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--mute); margin:0 0 10px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; }
+  .grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); margin-bottom:16px; }
+  .two { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); }
+  button { font:inherit; border:1px solid var(--line); background:var(--card); color:var(--ink); padding:6px 12px; border-radius:7px; cursor:pointer; }
+  button:hover { border-color:var(--acc); } button.primary { background:var(--acc); color:#fff; border-color:var(--acc); }
+  button:disabled { opacity:.5; cursor:wait; }
+  select { font:inherit; padding:6px; border-radius:7px; border:1px solid var(--line); background:var(--card); color:var(--ink); }
+  .meta { color:var(--mute); font-size:13px; } .pill { display:inline-block; padding:1px 8px; border-radius:99px; font-size:12px; background:var(--line); }
+  ul { list-style:none; margin:6px 0 0; padding:0; } li { padding:6px 0; border-top:1px solid var(--line); } li:first-child { border-top:0; }
+  .row { display:flex; justify-content:space-between; gap:8px; }
+  .price { font-variant-numeric:tabular-nums; }
+  .tag { font-size:11px; font-weight:600; padding:1px 7px; border-radius:5px; margin-right:6px; }
+  .price_change { background:#fef0c7; color:#93370d; } .product_added,.product_removed { background:#e0eaff; color:#2d31a6; }
+  .new_promo,.promo_ended { background:#fce7f6; color:#9f1a77; } .new_page,.page_removed { background:#d1fadf; color:#05603a; }
+  .hi { color:var(--bad); } .md { color:var(--warn); } .lo { color:var(--mute); }
+  .actions { padding-left:0; counter-reset:a; } .actions li { counter-increment:a; padding-left:26px; position:relative; }
+  .actions li::before { content:counter(a); position:absolute; left:0; top:6px; width:18px; height:18px; border-radius:50%; background:var(--acc); color:#fff; font-size:11px; text-align:center; line-height:18px; }
+  .err { color:var(--bad); font-size:13px; } .bar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>RivalWatch <small>AI competitor intelligence</small></h1>
+    <div class="bar">
+      <span class="pill" id="credits"></span><span class="pill" id="next"></span>
+      <button class="primary" id="crawl">Crawl now</button>
+    </div>
+  </header>
+
+  <h2>Competitors</h2>
+  <div class="grid" id="comps"></div>
+
+  <div class="card" id="demo" style="margin-bottom:16px">
+    <h2>Live demo: edit a competitor's test page</h2>
+    <div class="bar">
+      <select id="site"></select>
+      <button data-a="price_drop">Cut a price 20%</button>
+      <button data-a="price_hike">Raise top price 15%</button>
+      <button data-a="add_tier">Add new tier</button>
+      <button data-a="promo">Launch promotion</button>
+      <button data-a="new_page">Publish new page</button>
+      <button id="reset">Reset</button>
+    </div>
+    <p class="meta" style="margin:8px 0 0" id="editmsg">Edit a page, then press “Crawl now” to see the change detected and summarised.</p>
+  </div>
+
+  <div class="two">
+    <div class="card"><h2>AI digest <span class="meta" id="src"></span></h2><div id="digest" class="meta">Nothing yet. Edit a page and crawl.</div></div>
+    <div class="card"><h2>Detected changes</h2><ul id="changes"></ul></div>
+  </div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
+let state = null;
+
+async function post(path, body) { const r = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {}) }); return r.json(); }
+
+function render(s) {
+  state = s;
+  $('credits').textContent = s.credits + ' credits';
+  $('src').textContent = s.digest ? '· ' + (s.digest.source === 'claude' ? 'Claude' : 'rule-based') : '';
+  $('crawl').disabled = s.running; $('crawl').textContent = s.running ? 'Crawling…' : 'Crawl now';
+
+  $('comps').replaceChildren(...s.competitors.map((c) => {
+    const snap = c.snapshot;
+    const prods = snap ? Object.values(snap.products) : [];
+    return el('div', { className: 'card' },
+      el('div', { className: 'row' }, el('strong', {}, c.name), el('span', { className: 'meta' }, snap ? snap.pagesCrawled + ' pages · ' + c.snapshots + ' snapshots' : 'pending')),
+      el('div', { className: 'meta' }, c.url),
+      c.error ? el('div', { className: 'err' }, c.error) : '',
+      el('ul', {}, ...prods.map((p) => el('li', { className: 'row' }, el('span', {}, p.name), el('span', { className: 'price' }, p.price)))),
+      snap && snap.promotions.length ? el('div', { style: 'margin-top:8px' }, ...snap.promotions.map((p) => el('div', { className: 'meta' }, '🏷 ' + p))) : '',
+      snap ? el('div', { className: 'meta', style: 'margin-top:6px' }, 'Pages: ' + snap.pages.join(', ')) : '');
+  }));
+
+  const sel = $('site');
+  if (s.testSites && !sel.options.length) s.testSites.forEach((t) => sel.add(new Option(t.name, t.id)));
+  $('demo').hidden = !s.testSites;
+
+  const d = s.digest;
+  $('digest').replaceChildren(...(d ? [
+    el('p', { style: 'margin:0 0 8px;color:var(--ink)' }, d.summary),
+    el('ol', { className: 'actions', style: 'list-style:none;margin:0;padding:0' }, ...d.actions.map((a) =>
+      el('li', {}, el('strong', {}, a.title + ' '), el('span', { className: { high: 'hi', medium: 'md', low: 'lo' }[a.priority] || 'lo' }, '(' + a.priority + ')'), el('div', { className: 'meta' }, a.why)))),
+  ] : [document.createTextNode('Nothing yet. Edit a page and crawl.')]));
+
+  $('changes').replaceChildren(...(s.changes.length ? s.changes.map((c) =>
+    el('li', {}, el('span', { className: 'tag ' + c.type }, c.type.replace('_', ' ')), el('strong', {}, c.competitor + ': '), c.label,
+      el('div', { className: 'meta' }, new Date(c.ts).toLocaleTimeString()))) : [el('li', { className: 'meta' }, 'No changes yet. Baseline captured, waiting for edits.')]));
+}
+
+async function refresh() { render(await (await fetch('/api/state')).json()); }
+setInterval(() => { if (state) { const t = Math.max(0, Math.round((state.nextRun - Date.now()) / 1000)); $('next').textContent = 'next auto-crawl in ' + Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); } }, 1000);
+setInterval(refresh, 4000);
+
+$('crawl').onclick = async () => { $('crawl').disabled = true; await post('/api/crawl'); await refresh(); };
+document.querySelectorAll('[data-a]').forEach((b) => b.onclick = async () => {
+  const r = await post('/api/test/edit', { site: $('site').value, action: b.dataset.a });
+  $('editmsg').textContent = r.edited ? 'Edited: ' + r.edited + '. Now press “Crawl now”.' : r.error;
+});
+$('reset').onclick = async () => { $('reset').disabled = true; await post('/api/test/reset'); $('reset').disabled = false; $('editmsg').textContent = 'Reset to baseline.'; await refresh(); };
+refresh();
+</script>
+</body>
+</html>
