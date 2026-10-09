@@ -1,0 +1,9 @@
+[
+  {"id": 41, "site": {"id": 3, "domain": "competitor-b.com", "role": "competitor"}, "type": "discounting",
+   "category": "Outdoor jackets", "headline": "Discounting 38 outdoor jackets, 22% off on average",
+   "why_it_matters": "You sell 21 products in this category.", "size": {"count": 38, "avg_pct_off": 22},
+   "evidence": [{"event_id": 901, "type": "price_drop", "product_url": "https://competitor-b.com/p/trail-jacket",
+                 "title": "Trail Jacket", "before": {"price": 120.0}, "after": {"price": 89.0},
+                 "occurred_at": "2026-10-07T10:00:00Z"}],
+   "ai_observed": false, "window": {"from": "2026-10-03", "to": "2026-10-09"}}
+]
