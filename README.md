@@ -10,9 +10,12 @@ A scheduled crawl stores snapshots → diffs them → an AI step writes a digest
 ## Run
 
 ```bash
+npm run dev    # same, but restarts automatically when you pull or edit code (use this while developing)
 npm start      # http://localhost:3000 (binds 127.0.0.1; set HOST=0.0.0.0 to expose). Node 20+, no dependencies
 npm test
 ```
+
+> After pulling new code, **restart the server**. The demo competitors and their product names are created in server memory at start-up, so an old process keeps serving old data even though the pages update.
 
 ## The click-through
 
