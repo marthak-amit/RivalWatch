@@ -16,7 +16,8 @@
   .sidebar .logo { padding:2px 8px; }
   .sidebar .qa { display:grid; gap:8px; padding:0 4px; }
   .sidebar .qa .btn { width:100%; justify-content:flex-start; }
-  .sidebar .next { font-size:12px; color:var(--mute); padding:0 4px; margin-top:-6px; }
+  .autocrawl { margin-left:auto; align-self:flex-start; font-size:13px; font-weight:600; font-variant-numeric:tabular-nums; color:var(--mute); background:var(--card); border:1px solid var(--line); border-radius:99px; padding:5px 12px; white-space:nowrap; }
+  .autocrawl::before { content:''; display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--good); margin-right:8px; }
   .navgroup { display:grid; gap:2px; } .navgroup h3 { font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--mute); margin:6px 10px 4px; font-weight:700; }
   .nav { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:9px; border:0; background:none; font:inherit; font-weight:600; color:var(--mute); cursor:pointer; text-align:left; width:100%; }
   .nav:hover { background:var(--side-hover); color:var(--ink); }
@@ -30,8 +31,8 @@
     .navgroup { gap:0; } .navgroup h3 { margin:4px 10px 2px; } #nav { gap:6px !important; }
     .nav { padding:6px 10px; } .plancard { padding:8px 10px; } .plancard .row { margin-bottom:2px; } .usercard .av { width:30px; height:30px; }
   }
-  @media (max-height:720px) { #sReport { display:none; } .nav { padding:5px 10px; } .sidebar .next { margin-top:-4px; } }
-  @media (max-height:600px) { .navgroup h3, .plancard .bar2, .sidebar .next { display:none; } .logo { font-size:16px; } .sidebar { gap:6px; } }
+  @media (max-height:720px) { #sReport { display:none; } .nav { padding:5px 10px; } }
+  @media (max-height:600px) { .navgroup h3, .plancard .bar2 { display:none; } .logo { font-size:16px; } .sidebar { gap:6px; } }
   @media (max-height:500px) { .plancard { display:none; } .sidebar .qa .btn { padding:4px 10px; } .nav { padding:4px 10px; } }
   @media (max-height:420px) { .sidebar { overflow-y:auto; } } /* last resort on tiny windows */
   .plancard { border:1px solid var(--line); border-radius:12px; padding:12px; } .plancard .row { margin-bottom:6px; }
@@ -99,7 +100,6 @@
       <button class="btn" id="sAdd"></button>
       <button class="btn" id="sReport"></button>
     </div>
-    <div class="next" id="sNext"></div>
     <nav id="nav" style="display:grid;gap:10px"></nav>
     <div class="grow"></div>
     <div class="plancard" id="plan"></div>
@@ -107,7 +107,7 @@
   </aside>
   <div class="scrim" id="scrim"></div>
   <div class="content">
-    <header class="topbar"><button class="iconbtn" id="burger" aria-label="Open menu"></button><div><h1 id="title"></h1><div class="sub" id="sub"></div></div></header>
+    <header class="topbar"><button class="iconbtn" id="burger" aria-label="Open menu"></button><div><h1 id="title"></h1><div class="sub" id="sub"></div></div><span class="autocrawl noprint" id="sNext" title="Time until the next scheduled crawl"></span></header>
     <main id="view"></main>
   </div>
 </div>
@@ -432,6 +432,7 @@ function paintShell() {
   document.querySelectorAll('.nav').forEach((b) => b.toggleAttribute('aria-current', false) || (b.dataset.k === tab && b.setAttribute('aria-current', 'page')));
   $('title').textContent = TITLES[tab]; document.title = TITLES[tab] + ': RivalWatch';
   if (!S) return;
+  tickTimer();
   $('sub').textContent = SUBS[tab]();
   $('sCrawl').disabled = S.running; $('sCrawlT').textContent = S.running ? 'Crawling…' : 'Crawl now';
   $('cnt').textContent = S.changes.length;
@@ -452,7 +453,14 @@ async function refresh(force) {
   paintShell();
   if (force || (next !== sig && !typing)) { sig = next; paintView(); }
 }
-setInterval(() => { if (!S) return; const t = Math.max(0, Math.round((S.nextRun - Date.now()) / 1000)); $('sNext').textContent = `Auto-crawl in ${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; }, 1000);
+function tickTimer() {
+  if (!S) return;
+  let next = S.nextRun; const step = S.intervalSec * 1000;
+  while (next <= Date.now()) next += step; // roll into the next cycle without waiting for the next poll
+  const t = Math.round((next - Date.now()) / 1000);
+  $('sNext').textContent = `Auto-crawl: ${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
+}
+setInterval(tickTimer, 1000);
 setInterval(() => { if (!document.hidden) refresh().catch(() => {}); }, 5000);
 window.addEventListener('hashchange', () => { const t = location.hash.slice(1); if (TITLES[t] && t !== tab) go(t); });
 buildNav(); paintShell();
